@@ -1,0 +1,37 @@
+[project]
+name = "oborovo-model"
+version = "0.1.0"
+description = "Project finance model for Oborovo Solar PV with Excel parity"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
+    "python-dateutil>=2.8.2",
+    "pydantic>=2.5.0",
+    "pandas>=2.1.0",
+    "openpyxl>=3.1.2",
+    "plotly>=5.18.0",
+    "streamlit>=1.35.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "ruff>=0.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
