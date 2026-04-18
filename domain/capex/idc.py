@@ -1,0 +1,145 @@
+"""IDC (Interest During Construction) calculator.
+
+IDC is interest on drawn senior debt during construction that gets
+capitalized into CAPEX. This creates a circular dependency:
+- Higher CAPEX → higher debt → more interest → even higher CAPEX
+
+The circular is resolved via fixed-point iteration.
+
+For Oborovo:
+- IDC = 1,086.0 kEUR
+- Construction: 12 months
+- Gearing: 75.24%
+- All-in rate: ~5.65%
+"""
+from scipy.optimize import fixed_point
+
+
+def calculate_idc_fixed_point(
+    base_capex_keur: float,
+    gearing_ratio: float,
+    all_in_rate: float,
+    construction_periods: int,
+    idc_seed: float = 0.0,
+    xtol: float = 1e-6,
+) -> float:
+    """Calculate IDC using fixed-point iteration.
+    
+    The IDC is computed assuming linear drawdown of debt during construction.
+    Interest on the average outstanding balance is capitalized.
+    
+    Args:
+        base_capex_keur: Base CAPEX (excluding IDC)
+        gearing_ratio: Debt / Total CAPEX ratio
+        all_in_rate: Annual interest rate (e.g., 0.0565 for 5.65%)
+        construction_periods: Number of construction periods (2 for semi-annual 12 months)
+        idc_seed: Initial guess for IDC
+        xtol: Convergence tolerance
+    
+    Returns:
+        IDC in kEUR
+    """
+    def iteration(idc_guess: float) -> float:
+        # Total CAPEX = base + IDC
+        total_capex = base_capex_keur + idc_guess
+        
+        # Senior debt = total capex × gearing
+        total_debt = total_capex * gearing_ratio
+        
+        # Assume linear drawdown: average outstanding = debt / 2
+        # During construction, interest accrues on average balance
+        avg_debt_during_construction = total_debt / 2
+        
+        # Construction years
+        construction_years = construction_periods / 2  # semi-annual: 2 periods = 1 year
+        
+        # IDC = average debt × rate × time
+        idc = avg_debt_during_construction * all_in_rate * construction_years
+        
+        return idc
+    
+    try:
+        result = fixed_point(
+            iteration,
+            x0=idc_seed,
+            xtol=xtol,
+            maxiter=100,
+            method="iteration",
+        )
+        return float(result)
+    except RuntimeError:
+        # Failed to converge, return seed
+        return idc_seed
+
+
+def calculate_idc_detailed(
+    capex_schedule: dict[int, float],
+    gearing_ratio: float,
+    all_in_rate: float,
+) -> float:
+    """Calculate IDC using detailed period-by-period drawdown.
+    
+    This is more accurate than the fixed-point approximation because it
+    accounts for the actual spending profile of CAPEX.
+    
+    Args:
+        capex_schedule: Dict mapping period_index → CAPEX in kEUR (construction only)
+        gearing_ratio: Debt / Total CAPEX ratio
+        all_in_rate: Annual interest rate
+    
+    Returns:
+        IDC in kEUR
+    """
+    if not capex_schedule:
+        return 0.0
+    
+    # Calculate cumulative CAPEX and debt drawn
+    cumulative_capex = 0.0
+    cumulative_debt = 0.0
+    idc_total = 0.0
+    
+    for period_idx in sorted(capex_schedule.keys()):
+        capex = capex_schedule[period_idx]
+        
+        # New CAPEX in this period
+        cumulative_capex += capex
+        
+        # New debt drawn (gearing × new CAPEX)
+        debt_drawn = capex * gearing_ratio
+        cumulative_debt += debt_drawn
+        
+        # Interest on outstanding debt (6 months = half year)
+        period_interest = cumulative_debt * all_in_rate * 0.5
+        
+        # Capitalize interest into CAPEX (IDC)
+        idc_total += period_interest
+    
+    return idc_total
+
+
+def idc_annuity_adjustment(
+    idc_keur: float,
+    all_in_rate: float,
+    debt_tenor_years: int,
+) -> float:
+    """Adjust IDC for annuity-style debt repayment.
+    
+    During construction, interest is capitalized. After COD, the IDC
+    is added to the debt principal and repaid over the tenor.
+    
+    Args:
+        idc_keur: IDC amount in kEUR
+        all_in_rate: Annual interest rate
+        debt_tenor_years: Senior debt tenor in years
+    
+    Returns:
+        Effective IDC in kEUR (slightly higher due to利息 capitalization)
+    """
+    if idc_keur <= 0 or all_in_rate <= 0 or debt_tenor_years <= 0:
+        return idc_keur
+    
+    # IDC becomes part of debt
+    # Interest on IDC during repayment period
+    idc_with_interest = idc_keur * (1 + all_in_rate * debt_tenor_years / 2)
+    
+    return idc_with_interest

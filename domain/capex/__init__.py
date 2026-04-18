@@ -1,0 +1,1 @@
+"""CAPEX module - spending profiles and IDC calculation."""
