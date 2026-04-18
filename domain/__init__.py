@@ -1,8 +1,28 @@
-"""Oborovo Project Finance Model - Domain Layer.
+"""Domain layer - pure business logic (no Streamlit/pandas dependencies).
 
-This package contains pure business logic (no Streamlit dependencies).
-Each module is designed to be testable and reusable.
+This package contains immutable dataclasses representing project finance inputs.
+All calculation functions are pure and testable.
 """
-from domain.period_engine import PeriodEngine, PeriodFrequency, PeriodMeta
+from domain.inputs import (
+    ProjectInputs,
+    ProjectInfo,
+    CapexItem,
+    CapexStructure,
+    OpexItem,
+    TechnicalParams,
+    RevenueParams,
+    FinancingParams,
+    TaxParams,
+)
 
-__all__ = ["PeriodEngine", "PeriodFrequency", "PeriodMeta"]
+__all__ = [
+    "ProjectInputs",
+    "ProjectInfo",
+    "CapexItem",
+    "CapexStructure",
+    "OpexItem",
+    "TechnicalParams",
+    "RevenueParams",
+    "FinancingParams",
+    "TaxParams",
+]
