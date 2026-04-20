@@ -9,6 +9,8 @@ Usage:
 import streamlit as st
 from datetime import date, datetime
 
+from dateutil.relativedelta import relativedelta
+
 from domain.inputs import (
     ProjectInputs, ProjectInfo, CapexStructure, CapexItem,
     OpexItem, TechnicalParams, RevenueParams, FinancingParams, TaxParams,
@@ -99,6 +101,9 @@ def init_session_state():
         'mra_enabled': False,
         'mra_months': 3,
 
+        # SHL (Subordinated Hybrid Loan)
+        'shl_rate': 0.0,
+
         # Horizon
         'investment_horizon': 30,
 
@@ -114,6 +119,11 @@ def init_session_state():
     if 'inputs' not in st.session_state:
         st.session_state.inputs = _build_inputs_from_session()
         st.session_state.engine = _build_engine_from_inputs(st.session_state.inputs)
+
+
+def _calculate_cod(financial_close, construction_months):
+    """Calculate COD date from financial close and construction period."""
+    return financial_close + relativedelta(months=construction_months)
 
 
 def _build_inputs_from_session() -> ProjectInputs:
@@ -219,8 +229,7 @@ def _build_inputs_from_session() -> ProjectInputs:
         country_iso="HR",
         financial_close=s.construction_start_date,
         construction_months=s.construction_period,
-        cod_date=date(s.construction_start_date.year + (s.construction_start_date.month > 6 and 1 or 0),
-                     (s.construction_start_date.month + s.construction_period) % 12 or 12, 1),
+        cod_date=_calculate_cod(s.construction_start_date, s.construction_period),
         horizon_years=s.investment_horizon,
         period_frequency=PeriodFrequency.SEMESTRIAL if s.semi_annual_mode else PeriodFrequency.ANNUAL,
     )
@@ -240,7 +249,7 @@ def _build_inputs_from_session() -> ProjectInputs:
     revenue = RevenueParams(
         ppa_base_tariff=s.ppa_base_tariff,
         ppa_term_years=s.ppa_term,
-        ppa_index=s.tariff_escalation,
+        ppa_index=s.tariff_escalation / 100.0 if s.tariff_escalation > 1 else s.tariff_escalation,
         ppa_production_share=1.0,
         market_scenario="Central",
         market_prices_curve=market_prices,
@@ -258,7 +267,7 @@ def _build_inputs_from_session() -> ProjectInputs:
         shl_rate=s.shl_rate if 'shl_rate' in s else 0.0,
         gearing_ratio=s.gearing_ratio,
         senior_tenor_years=s.debt_tenor,
-        base_rate=s.base_rate,
+        base_rate=s.base_rate / 100.0 if s.base_rate > 1 else s.base_rate,
         margin_bps=int(s.margin * 100),
         floating_share=0.2,
         fixed_share=0.8,
@@ -325,7 +334,7 @@ def render_sidebar():
         st.title("⚙️ Parameters")
 
         # Navigation
-        nav_options = ["🏠 Dashboard", "📊 Charts", "💵 Waterfall", "📋 Scenarios", "📈 Analytics", "📁 Projects", "📊 Comparison", "📤 Outputs", "📊 Excel Parity"]
+        nav_options = ["🏠 Dashboard", "📊 Charts", "💵 Waterfall", "📋 Scenarios", "📈 Analytics", "📁 Projects", "📊 Comparison", "📤 Export", "📤 Outputs", "📊 Excel Parity"]
         idx = nav_options.index(st.session_state.active_sheet) if st.session_state.active_sheet in nav_options else 0
         selected = st.radio("Navigate", nav_options, index=idx)
         st.session_state.active_sheet = selected
@@ -373,7 +382,7 @@ def render_sidebar():
         with st.expander("🏦 Financing", expanded=True):
             st.slider("Gearing (%)", key="gearing_ratio", min_value=0.0, max_value=95.0, value=70.0, step=1.0, format="%.0f")
             st.number_input("Debt Tenor (years)", key="debt_tenor", min_value=5, max_value=30, step=1)
-            st.number_input("Base Rate (%)", key="base_rate", min_value=0.0, max_value=15.0, step=0.1, format="%.2f") / 100
+            st.number_input("Base Rate (%)", key="base_rate", min_value=0.0, max_value=15.0, step=0.1, format="%.2f")
             st.slider("Margin (bps)", key="margin", min_value=0, max_value=500, value=200, step=5)
             st.slider("Target DSCR (x)", key="target_dscr", min_value=1.0, max_value=2.0, value=1.15, step=0.05, format="%.2f")
             st.checkbox("Debt Sculpting", key="debt_sculpting")
@@ -489,6 +498,10 @@ def main():
     elif page == "📊 Comparison":
         from ui.pages.comparison import render_comparison
         render_comparison(st.session_state.inputs, st.session_state.engine)
+
+    elif page == "📤 Export":
+        from ui.pages.export_page import render_export
+        render_export(st.session_state.inputs, st.session_state.engine)
 
     elif page == "📤 Outputs":
         from ui.pages.outputs import render_outputs
