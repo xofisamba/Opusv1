@@ -25,6 +25,7 @@ from domain.financing.sculpting_iterative import (
 )
 from domain.financing.schedule import senior_debt_amount
 from domain.returns.xirr import xirr, xnpv
+from utils.logging_config import get_logger
 
 
 @dataclass
@@ -418,19 +419,23 @@ def run_waterfall(
     # Calculate returns
     dates = [p.end_date for p in periods]
     
+    _log = get_logger(__name__)
+
     try:
         project_irr = xirr(project_cfs, dates, guess=0.08)
         project_npv = xnpv(discount_rate_project, project_cfs, dates)
-    except Exception:
-        project_irr = 0
-        project_npv = 0
-    
+    except Exception as exc:
+        _log.warning("XIRR/XNPV failed for project CFs: %s", exc)
+        project_irr = 0.0
+        project_npv = 0.0
+
     try:
         equity_irr = xirr(equity_cfs, dates, guess=0.10)
         equity_npv = xnpv(discount_rate_equity, equity_cfs, dates)
-    except Exception:
-        equity_irr = 0
-        equity_npv = 0
+    except Exception as exc:
+        _log.warning("XIRR/XNPV failed for equity CFs: %s", exc)
+        equity_irr = 0.0
+        equity_npv = 0.0
     
     # Build result
     result = WaterfallResult(

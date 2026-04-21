@@ -9,7 +9,11 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
+from utils.logging_config import get_logger
+
 from domain.inputs import ProjectInputs
+
+_log = get_logger(__name__)
 
 
 PROJECTS_DIR = Path("/root/.openclaw/workspace/oborovo_model/projects")
@@ -112,7 +116,8 @@ def list_projects() -> list[dict]:
                 "created_at": data.get("created_at", ""),
                 "description": data.get("description", ""),
             })
-        except Exception:
+        except Exception as exc:
+            _log.warning("Failed to list project %s: %s", f.name, exc)
             continue
     
     return projects
@@ -168,5 +173,6 @@ def import_from_json(path: str) -> Optional[dict]:
     try:
         with open(path, "r") as f:
             return json.load(f)
-    except Exception:
+    except Exception as exc:
+        _log.warning("Failed to import project %s: %s", path, exc)
         return None
