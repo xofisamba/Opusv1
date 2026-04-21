@@ -5,7 +5,7 @@ Projects are stored as JSON files with all inputs and metadata.
 """
 import json
 import os
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
