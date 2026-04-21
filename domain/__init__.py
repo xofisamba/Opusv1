@@ -2,6 +2,16 @@
 
 This package contains immutable dataclasses representing project finance inputs.
 All calculation functions are pure and testable.
+
+Sub-modules:
+- analytics: Monte Carlo, LCOE, BESS
+- capex: spending profiles, IDC calculation
+- financing: debt scheduling, sculpting, covenants
+- opex: operational expenditure projections
+- returns: XIRR, XNPV calculations
+- revenue: generation, tariff calculations
+- tax: corporate tax, ATAD, loss carryforward
+- waterfall: cash flow waterfall with distribution
 """
 from domain.inputs import (
     ProjectInputs,
@@ -14,8 +24,10 @@ from domain.inputs import (
     FinancingParams,
     TaxParams,
 )
+from domain.period_engine import PeriodEngine, PeriodMeta
 
 __all__ = [
+    # Core inputs
     "ProjectInputs",
     "ProjectInfo",
     "CapexItem",
@@ -25,4 +37,7 @@ __all__ = [
     "RevenueParams",
     "FinancingParams",
     "TaxParams",
+    # Period engine
+    "PeriodEngine",
+    "PeriodMeta",
 ]
