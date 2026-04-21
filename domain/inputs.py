@@ -57,7 +57,16 @@ class CapexItem:
     def total_spending_shares(self) -> float:
         """Sum of all spending shares (y0 + profile). Should equal 1.0."""
         return self.y0_share + sum(self.spending_profile)
-    
+
+    def __post_init__(self):
+        """Validate spending shares sum to approximately 1.0."""
+        total = self.total_spending_shares
+        if total > 0 and abs(total - 1.0) > 0.01:
+            raise ValueError(
+                f'{self.name}: spending shares sum to {total:.4f}, expected 1.0. '
+                f'Check spending_profile or y0_share values.'
+            )
+
     def amount_in_period(self, period: int) -> float:
         """Return CAPEX amount for a given period.
         

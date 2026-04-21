@@ -130,6 +130,41 @@ def _build_inputs_from_session() -> ProjectInputs:
     """Build ProjectInputs from session state."""
     s = st.session_state
 
+    # ============ IMP-1: INPUT VALIDATION ============
+    errors = []
+    warnings = []
+
+    # P90 must be less than P50
+    if s.get('yield_p90', 0) >= s.get('yield_p50', 0):
+        errors.append(
+            f'P90 yield ({s.get("yield_p90", 0):.0f} hrs) mora biti manji od P50 ({s.get("yield_p50", 0):.0f} hrs).'
+        )
+
+    # Gearing <= 90% (debt covenant limit)
+    if s.get('gearing_ratio', 0) > 0.90:
+        errors.append(
+            f'Gearing {s.get("gearing_ratio", 0):.1%} je iznad 90% — DSCR covenant ne može biti zadovoljen.'
+        )
+    elif s.get('gearing_ratio', 0) > 0.80:
+        warnings.append(
+            f'Gearing {s.get("gearing_ratio", 0):.1%} je visok — preporučeno < 80%.'
+        )
+
+    # PPA term <= horizon
+    if s.get('ppa_term', 0) > s.get('investment_horizon', 30):
+        errors.append(
+            f'PPA rok ({s.get("ppa_term", 0)}g) ne može biti duži od horizonta ({s.get("investment_horizon", 30)}g).'
+        )
+
+    # Display errors and stop if any
+    for w in warnings:
+        st.warning(w)
+    if errors:
+        for e in errors:
+            st.error(e)
+        st.stop()
+    # ============ END IMP-1 VALIDATION ============
+
     # Determine capacity
     if s.technology == 'Solar':
         capacity = s.capacity_dc
@@ -408,16 +443,9 @@ def render_sidebar():
             if st.session_state.idc_capitalization:
                 st.slider("IDC Rate (%)", key="idc_rate", min_value=0.0, max_value=15.0, value=6.0, step=0.5, format="%.1f")
 
-        # BESS section
-        with st.expander("🔋 BESS", expanded=False):
-            st.checkbox("Enable BESS", key="bess_enabled")
-            if st.session_state.bess_enabled:
-                st.number_input("BESS Capacity (MWh)", key="bess_capacity_mwh", min_value=1.0, max_value=1000.0, step=1.0)
-                st.number_input("BESS Power (MW)", key="bess_power_mw", min_value=1.0, max_value=500.0, step=0.1)
-                st.number_input("BESS Cost (€/MWh)", key="bess_cost_per_mwh", min_value=100000, max_value=500000, step=10000)
-                st.slider("Roundtrip Efficiency (%)", key="bess_roundtrip_efficiency", min_value=70.0, max_value=95.0, value=88.0, step=1.0, format="%.0f")
-                st.slider("Annual Cycles", key="bess_annual_cycles", min_value=100, max_value=365, value=365, step=5)
-                st.slider("Degradation Rate (%)", key="bess_degradation_rate", min_value=0.0, max_value=5.0, value=2.0, step=0.1, format="%.1f")
+        # TODO: BESS modul je u razvoju — trenutno sakriven
+        # with st.expander("🔋 BESS", expanded=False):
+        #     st.info("BESS modul je u razvoju.")
 
         # Reserves section
         with st.expander("💼 Reserves", expanded=False):
@@ -476,8 +504,8 @@ def main():
         render_dashboard(st.session_state.inputs, st.session_state.engine)
 
     elif page == "📋 Scenarios":
-        from ui.pages.scenarios import render_scenarios
-        render_scenarios(st.session_state.inputs, st.session_state.engine)
+        from ui.pages.scenarios import render_scenario_manager
+        render_scenario_manager(st.session_state.inputs, None)
 
     elif page == "💵 Waterfall":
         from ui.pages.waterfall_page import render_waterfall
