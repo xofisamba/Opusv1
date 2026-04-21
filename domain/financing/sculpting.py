@@ -6,9 +6,29 @@ Debt = PV(payments at debt_rate)
 
 This matches Excel's Macro sheet debt sculpting behavior.
 """
+# DEPRECATION NOTICE (2026-04-21)
+# ================================================================
+# Funkcije u ovom modulu (sculpt_debt_dscr, find_debt_for_target_dscr) su
+# zastarjele i zamijenjene s iterative_sculpt_debt u sculpting_iterative.py.
+#
+# Canonical implementacija: domain/financing/sculpting_iterative.py
+# Koristi: domain/waterfall/waterfall_engine.py (cached_run_waterfall)
+#
+# Ove funkcije ostaju ovdje radi backward kompatibilnosti dok se testovi ne ažuriraju.
+# ================================================================
+import warnings as _warnings
 from typing import Optional
 from dataclasses import dataclass
 from scipy.optimize import brentq
+
+
+def _sculpt_debt_dscr_deprecation_warning():
+    _warnings.warn(
+        "sculpt_debt_dscr je deprecated. Koristi iterative_sculpt_debt iz "
+        "domain.financing.sculpting_iterative",
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 @dataclass
@@ -33,24 +53,17 @@ def sculpt_debt_dscr(
 ) -> SculptingResult:
     """Calculate sculpted debt using DSCR-based iterative approach.
     
+    .. deprecated::
+        Koristi :func:`iterative_sculpt_debt` iz
+        :mod:`domain.financing.sculpting_iterative` umjesto ove funkcije.
+    
     The sculpting works by:
     1. Assume a debt amount
     2. Calculate payments = EBITDA / target_dscr
     3. Check if PV(payments) matches the debt
     4. Adjust debt until PV = debt
-    
-    Args:
-        ebitda_schedule: List of EBITDA values per period (kEUR)
-        rate_per_period: Interest rate per period (e.g., 0.02825 for semi-annual)
-        tenor_periods: Number of periods
-        target_dscr: Target DSCR (e.g., 1.15)
-        min_dscr: Minimum allowable DSCR (for lockup)
-        max_iterations: Maximum iterations for convergence
-        tolerance: Convergence tolerance for DSCR deviation
-    
-    Returns:
-        SculptingResult with debt amount, payments, and balances
     """
+    _sculpt_debt_dscr_deprecation_warning()
     if tenor_periods <= 0 or len(ebitda_schedule) < tenor_periods:
         raise ValueError("Insufficient EBITDA data for tenor")
     
