@@ -130,6 +130,11 @@ class CapexStructure:
             self.taxes, self.project_acquisition, self.project_rights,
         ]
         return sum(item.amount_keur for item in items)
+
+    @property
+    def hard_capex(self) -> float:
+        """Alias for hard_capex_keur for backward compatibility."""
+        return self.hard_capex_keur
     
     @property
     def total_capex_before_idc(self) -> float:

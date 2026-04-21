@@ -130,42 +130,20 @@ def _build_inputs_from_session() -> ProjectInputs:
     """Build ProjectInputs from session state."""
     s = st.session_state
 
-    # ============ IMP-1: INPUT VALIDATION ============
-    errors = []
-    warnings = []
+    # ============ IMP-1: INPUT VALIDATION (using app/validation.py) ============
+    from app.validation import validate_session_inputs
 
-    # P90 must be less than P50
-    if s.get('yield_p90', 0) >= s.get('yield_p50', 0):
-        errors.append(
-            f'P90 yield ({s.get("yield_p90", 0):.0f} hrs) mora biti manji od P50 ({s.get("yield_p50", 0):.0f} hrs).'
-        )
+    validation = validate_session_inputs(s)
 
-    # Gearing <= 90% (debt covenant limit)
-    if s.get('gearing_ratio', 0) > 0.90:
-        errors.append(
-            f'Gearing {s.get("gearing_ratio", 0):.1%} je iznad 90% — DSCR covenant ne može biti zadovoljen.'
-        )
-    elif s.get('gearing_ratio', 0) > 0.80:
-        warnings.append(
-            f'Gearing {s.get("gearing_ratio", 0):.1%} je visok — preporučeno < 80%.'
-        )
-
-    # PPA term <= horizon
-    if s.get('ppa_term', 0) > s.get('investment_horizon', 30):
-        errors.append(
-            f'PPA rok ({s.get("ppa_term", 0)}g) ne može biti duži od horizonta ({s.get("investment_horizon", 30)}g).'
-        )
-
-    # Display errors and stop if any
-    for w in warnings:
+    for w in validation.warnings:
         st.warning(w)
-    if errors:
-        for e in errors:
+    if validation.errors:
+        for e in validation.errors:
             st.error(e)
         st.stop()
-    # ============ END IMP-1 VALIDATION ============
+    # ============ END VALIDATION ============
 
-    # Determine capacity
+    # Normalize capacity based on technology
     if s.technology == 'Solar':
         capacity = s.capacity_dc
     else:
@@ -189,16 +167,16 @@ def _build_inputs_from_session() -> ProjectInputs:
 
     # 13 items for CapexStructure fields (epc_other through project_rights)
     other_items = [
-        CapexItem(name="Other EPC", amount_keur=capacity * 30000 / 1000, y0_share=0.5, spending_profile=(0.5, 0.5)),
-        CapexItem(name="Grid Connection", amount_keur=capacity * 30000 / 1000, y0_share=0.5, spending_profile=(0.5, 0.5)),
+        CapexItem(name="Other EPC", amount_keur=capacity * 30000 / 1000, y0_share=0.5, spending_profile=(0.5,)),
+        CapexItem(name="Grid Connection", amount_keur=capacity * 30000 / 1000, y0_share=0.5, spending_profile=(0.5,)),
         CapexItem(name="Operations Preparation", amount_keur=capacity * 5000 / 1000, y0_share=1.0),
         CapexItem(name="Insurance", amount_keur=capacity * 5000 / 1000, y0_share=1.0),
         CapexItem(name="Lease & Property Tax", amount_keur=capacity * 2000 / 1000, y0_share=1.0),
-        CapexItem(name="Construction Mgmt A", amount_keur=capacity * 15000 / 1000, y0_share=0.5, spending_profile=(0.5, 0.5)),
-        CapexItem(name="Commissioning", amount_keur=capacity * 5000 / 1000, y0_share=0.5, spending_profile=(0.5, 0.5)),
-        CapexItem(name="Audit & Legal", amount_keur=capacity * 3000 / 1000, y0_share=0.5, spending_profile=(0.5, 0.5)),
+        CapexItem(name="Construction Mgmt A", amount_keur=capacity * 15000 / 1000, y0_share=0.5, spending_profile=(0.5,)),
+        CapexItem(name="Commissioning", amount_keur=capacity * 5000 / 1000, y0_share=0.5, spending_profile=(0.5,)),
+        CapexItem(name="Audit & Legal", amount_keur=capacity * 3000 / 1000, y0_share=0.5, spending_profile=(0.5,)),
         CapexItem(name="Taxes & Duties", amount_keur=capacity * 2000 / 1000, y0_share=1.0),
-        CapexItem(name="Construction Mgmt B", amount_keur=0.0, y0_share=0.5, spending_profile=(0.5, 0.5)),
+        CapexItem(name="Construction Mgmt B", amount_keur=0.0, y0_share=0.5, spending_profile=(0.5,)),
         CapexItem(name="Project Acquisition", amount_keur=1000.0, y0_share=1.0),
         CapexItem(name="Project Rights", amount_keur=3000, y0_share=1.0),
         CapexItem(name="Contingencies", amount_keur=capacity * 40000 / 1000, y0_share=1.0),
@@ -295,12 +273,15 @@ def _build_inputs_from_session() -> ProjectInputs:
         co2_price_eur=1.5,
     )
 
+    # Normalize gearing: slider returns 0-95 (percent) → convert to 0-0.95 (fraction)
+    gearing = s.gearing_ratio / 100.0 if s.gearing_ratio > 1.0 else s.gearing_ratio
+
     financing = FinancingParams(
         share_capital_keur=500.0,
         share_premium_keur=0.0,
         shl_amount_keur=0.0,
         shl_rate=s.shl_rate if 'shl_rate' in s else 0.0,
-        gearing_ratio=s.gearing_ratio,
+        gearing_ratio=gearing,
         senior_tenor_years=s.debt_tenor,
         base_rate=s.base_rate / 100.0 if s.base_rate > 1 else s.base_rate,
         margin_bps=int(s.margin * 100),

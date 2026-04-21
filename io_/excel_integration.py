@@ -282,7 +282,7 @@ def generate_baseline_json(inputs: ProjectInputs, output_path: str):
         },
         "capex": {
             "total_capex_keur": inputs.capex.total_capex,
-            "hard_capex_keur": inputs.capex.hard_capex,
+            "hard_capex_keur": inputs.capex.hard_capex_keur,
         },
         "revenue": {
             "ppa_base_tariff": inputs.revenue.ppa_base_tariff,

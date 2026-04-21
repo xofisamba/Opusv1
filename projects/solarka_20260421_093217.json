@@ -1,0 +1,306 @@
+{
+  "name": "Solarka",
+  "description": "Solar project, 53.6 MWp",
+  "created_at": "2026-04-21T09:32:17.794632",
+  "version": "1.0",
+  "inputs": {
+    "info": {
+      "name": "Solar Project",
+      "company": "Company",
+      "code": "PROJECT",
+      "country_iso": "HR",
+      "financial_close": "2025-01-01",
+      "construction_months": 12,
+      "cod_date": "2026-01-01",
+      "horizon_years": 30,
+      "period_frequency": "Annual"
+    },
+    "technical": {
+      "capacity_mw": 53.63,
+      "yield_scenario": "P_50",
+      "operating_hours_p50": 1494.0,
+      "operating_hours_p90_10y": 1410.0,
+      "pv_degradation": 0.004,
+      "bess_degradation": 0.02,
+      "plant_availability": 0.99,
+      "grid_availability": 0.99,
+      "bess_enabled": false
+    },
+    "capex": {
+      "epc_contract": {
+        "name": "EPC Contract",
+        "amount_keur": 42904.0,
+        "y0_share": 0.0,
+        "spending_profile": [
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333
+        ]
+      },
+      "production_units": {
+        "name": "Production Units",
+        "amount_keur": 10726.0,
+        "y0_share": 0.0,
+        "spending_profile": [
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.08333333333333333
+        ]
+      },
+      "epc_other": {
+        "name": "Other EPC",
+        "amount_keur": 1608.9,
+        "y0_share": 0.5,
+        "spending_profile": [
+          0.5
+        ]
+      },
+      "grid_connection": {
+        "name": "Grid Connection",
+        "amount_keur": 1608.9,
+        "y0_share": 0.5,
+        "spending_profile": [
+          0.5
+        ]
+      },
+      "ops_prep": {
+        "name": "Operations Preparation",
+        "amount_keur": 268.15,
+        "y0_share": 1.0,
+        "spending_profile": []
+      },
+      "insurances": {
+        "name": "Insurance",
+        "amount_keur": 268.15,
+        "y0_share": 1.0,
+        "spending_profile": []
+      },
+      "lease_tax": {
+        "name": "Lease & Property Tax",
+        "amount_keur": 107.26,
+        "y0_share": 1.0,
+        "spending_profile": []
+      },
+      "construction_mgmt_a": {
+        "name": "Construction Mgmt A",
+        "amount_keur": 804.45,
+        "y0_share": 0.5,
+        "spending_profile": [
+          0.5
+        ]
+      },
+      "commissioning": {
+        "name": "Commissioning",
+        "amount_keur": 268.15,
+        "y0_share": 0.5,
+        "spending_profile": [
+          0.5
+        ]
+      },
+      "audit_legal": {
+        "name": "Audit & Legal",
+        "amount_keur": 160.89,
+        "y0_share": 0.5,
+        "spending_profile": [
+          0.5
+        ]
+      },
+      "construction_mgmt_b": {
+        "name": "Construction Mgmt B",
+        "amount_keur": 0.0,
+        "y0_share": 0.5,
+        "spending_profile": [
+          0.5
+        ]
+      },
+      "contingencies": {
+        "name": "Contingencies",
+        "amount_keur": 2145.2,
+        "y0_share": 1.0,
+        "spending_profile": []
+      },
+      "taxes": {
+        "name": "Taxes & Duties",
+        "amount_keur": 107.26,
+        "y0_share": 1.0,
+        "spending_profile": []
+      },
+      "project_acquisition": {
+        "name": "Project Acquisition",
+        "amount_keur": 1000.0,
+        "y0_share": 1.0,
+        "spending_profile": []
+      },
+      "project_rights": {
+        "name": "Project Rights",
+        "amount_keur": 3000,
+        "y0_share": 1.0,
+        "spending_profile": []
+      },
+      "idc_keur": 1949.3192999999999,
+      "commitment_fees_keur": 324.88655,
+      "bank_fees_keur": 974.6596499999999,
+      "other_financial_keur": 0.0,
+      "vat_costs_keur": 0.0,
+      "reserve_accounts_keur": 0.0
+    },
+    "opex": [
+      {
+        "name": "Technical Management",
+        "y1_amount_keur": 120.6675,
+        "annual_inflation": 0.02,
+        "step_changes": {}
+      },
+      {
+        "name": "Infrastructure Maintenance",
+        "y1_amount_keur": 144.80100000000002,
+        "annual_inflation": 0.02,
+        "step_changes": {}
+      },
+      {
+        "name": "Insurance",
+        "y1_amount_keur": 152.84550000000002,
+        "annual_inflation": 0.02,
+        "step_changes": {}
+      },
+      {
+        "name": "Lease & Property Tax",
+        "y1_amount_keur": 120.6675,
+        "annual_inflation": 0.02,
+        "step_changes": {}
+      },
+      {
+        "name": "Power Expenses",
+        "y1_amount_keur": 72.40050000000001,
+        "annual_inflation": 0.0,
+        "step_changes": {}
+      },
+      {
+        "name": "Fees",
+        "y1_amount_keur": 56.31150000000001,
+        "annual_inflation": 0.0,
+        "step_changes": {}
+      },
+      {
+        "name": "Audit & Legal",
+        "y1_amount_keur": 16.089000000000002,
+        "annual_inflation": 0.02,
+        "step_changes": {}
+      },
+      {
+        "name": "Bank Fees",
+        "y1_amount_keur": 12.06675,
+        "annual_inflation": 0.02,
+        "step_changes": {}
+      },
+      {
+        "name": "Environmental & Social",
+        "y1_amount_keur": 8.044500000000001,
+        "annual_inflation": 0.02,
+        "step_changes": {}
+      },
+      {
+        "name": "Contingencies",
+        "y1_amount_keur": 32.178000000000004,
+        "annual_inflation": 0.02,
+        "step_changes": {}
+      }
+    ],
+    "revenue": {
+      "ppa_base_tariff": 65.0,
+      "ppa_term_years": 10,
+      "ppa_index": 0.02,
+      "ppa_production_share": 1.0,
+      "market_scenario": "Central",
+      "market_prices_curve": [
+        60.0,
+        61.2,
+        62.424,
+        63.67248000000001,
+        64.9459296,
+        66.244848192,
+        67.56974515584001,
+        68.92114005895681,
+        70.29956286013595,
+        71.70555411733866,
+        73.13966519968544,
+        74.60245850367914,
+        76.09450767375273,
+        77.61639782722779,
+        79.16872578377235,
+        80.75210029944779,
+        82.36714230543674,
+        84.01448515154549,
+        85.69477485457641,
+        87.40867035166792,
+        89.1568437587013,
+        90.93998063387531,
+        92.75878024655282,
+        94.6139558514839,
+        96.50623496851357,
+        98.43635966788383,
+        100.40508686124151,
+        102.41318859846635,
+        104.46145237043568,
+        106.55068141784439
+      ],
+      "market_inflation": 0.02,
+      "balancing_cost_pv": 0.025,
+      "balancing_cost_bess": 0.025,
+      "co2_enabled": false,
+      "co2_price_eur": 1.5
+    },
+    "financing": {
+      "share_capital_keur": 500.0,
+      "share_premium_keur": 0.0,
+      "shl_amount_keur": 0.0,
+      "shl_rate": 0.0,
+      "gearing_ratio": 0.7,
+      "senior_debt_amount_keur": 0.0,
+      "senior_tenor_years": 12,
+      "base_rate": 0.0303,
+      "margin_bps": 200,
+      "floating_share": 0.2,
+      "fixed_share": 0.8,
+      "hedge_coverage": 0.8,
+      "commitment_fee": 0.005,
+      "arrangement_fee": 0.015,
+      "structuring_fee": 0.0,
+      "target_dscr": 1.15,
+      "lockup_dscr": 1.1,
+      "min_llcr": 1.15,
+      "dsra_months": 6
+    },
+    "tax": {
+      "corporate_rate": 0.1,
+      "loss_carryforward_years": 5,
+      "loss_carryforward_cap": 1.0,
+      "legal_reserve_cap": 0.1,
+      "thin_cap_enabled": false,
+      "thin_cap_de_ratio": 0.8,
+      "atad_ebitda_limit": 0.3,
+      "atad_min_interest_keur": 3000.0,
+      "wht_sponsor_dividends": 0.05,
+      "wht_sponsor_shl_interest": 0.0,
+      "shl_cap_applies": false
+    }
+  }
+}
