@@ -2,9 +2,7 @@
 import streamlit as st
 import pandas as pd
 
-from domain.waterfall.waterfall_engine import run_waterfall, print_waterfall_summary
-from domain.revenue.generation import full_revenue_schedule, full_generation_schedule
-from domain.opex.projections import opex_schedule_annual
+from domain.waterfall.waterfall_engine import cached_run_waterfall, print_waterfall_summary
 from domain.capex.spending_profile import construction_capex_schedule as full_capex_schedule
 
 
@@ -74,26 +72,21 @@ def render_waterfall(inputs, engine) -> None:
     shl_amount = 0  # No SHL in base case
     shl_rate = 0.06 / 2
     
-    # Run waterfall
-    with st.spinner("Running waterfall with iterative sculpting..."):
-        result = run_waterfall(
-            ebitda_schedule=ebitda_schedule,
-            revenue_schedule=rev_schedule,
-            generation_schedule=gen_schedule,
-            depreciation_schedule=dep_schedule,
-            periods=periods,
-            total_capex=total_capex,
-            rate_per_period=rate,
-            tenor_periods=tenor_periods,
-            target_dscr=target_dscr,
-            lockup_dscr=lockup_dscr,
-            tax_rate=tax.corporate_rate,
-            dsra_months=dsra_months,
-            shl_amount=shl_amount,
-            shl_rate=shl_rate,
-            discount_rate_project=0.0641,
-            discount_rate_equity=0.0965,
-        )
+    # Run cached waterfall (rebuilds schedules internally)
+    result = cached_run_waterfall(
+        inputs=inputs,
+        engine=engine,
+        rate_per_period=rate,
+        tenor_periods=tenor_periods,
+        target_dscr=target_dscr,
+        lockup_dscr=lockup_dscr,
+        tax_rate=tax.corporate_rate,
+        dsra_months=financing.dsra_months,
+        shl_amount=shl_amount,
+        shl_rate=shl_rate,
+        discount_rate_project=0.0641,
+        discount_rate_equity=0.0965,
+    )
     
     # Display summary
     st.subheader("📊 Waterfall Summary")

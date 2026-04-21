@@ -11,9 +11,15 @@ Where:
 - G19: curtailment assumption
 - Degradation: annual degradation factor
 """
+import streamlit as st
 from typing import Sequence
 from domain.inputs import TechnicalParams, ProjectInputs
 from domain.period_engine import PeriodEngine, PeriodMeta
+
+
+# Hash function for PeriodEngine - needed for @st.cache_data
+def _hash_engine(e: PeriodEngine) -> tuple:
+    return (e.fc, e.construction_months, e.horizon_years, e.ppa_years, e.freq)
 
 
 def period_generation(
@@ -146,6 +152,7 @@ def period_revenue(
     return revenue_keur
 
 
+@st.cache_data(show_spinner=False, hash_funcs={PeriodEngine: _hash_engine})
 def full_generation_schedule(
     inputs: ProjectInputs,
     engine: PeriodEngine,
@@ -189,6 +196,7 @@ def full_generation_schedule(
     return schedule
 
 
+@st.cache_data(show_spinner=False, hash_funcs={PeriodEngine: _hash_engine})
 def full_revenue_schedule(
     inputs: ProjectInputs,
     engine: PeriodEngine,

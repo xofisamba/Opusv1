@@ -8,9 +8,14 @@ Each item has:
 
 Total Y1 OPEX for Oborovo: 1,353.91 kEUR
 """
+import streamlit as st
 from typing import Sequence
 from domain.inputs import OpexItem, ProjectInputs
 from domain.period_engine import PeriodEngine, PeriodMeta
+
+
+def _hash_engine(e: PeriodEngine) -> tuple:
+    return (e.fc, e.construction_months, e.horizon_years, e.ppa_years, e.freq)
 
 
 def opex_year(
@@ -29,6 +34,7 @@ def opex_year(
     return sum(item.amount_at_year(year_index) for item in items)
 
 
+@st.cache_data(show_spinner=False)
 def opex_schedule_annual(
     inputs: ProjectInputs,
     horizon_years: int = 30,
@@ -87,6 +93,7 @@ def opex_per_mwh_y1(
     return (opex_y1 * 1000) / generation_y1_mwh
 
 
+@st.cache_data(show_spinner=False, hash_funcs={PeriodEngine: _hash_engine})
 def opex_schedule_period(
     inputs: ProjectInputs,
     engine: PeriodEngine,
