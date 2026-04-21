@@ -74,7 +74,7 @@ def render_export(inputs, engine) -> None:
                         st.download_button(
                             "📥 Download Excel",
                             f,
-                            filename=filename,
+                            file_name=filename,
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
                 else:
@@ -103,7 +103,7 @@ def render_export(inputs, engine) -> None:
                         st.download_button(
                             "📥 Download CSV",
                             f,
-                            filename=csv_filename,
+                            file_name=csv_filename,
                             mime="text/csv"
                         )
                 else:
