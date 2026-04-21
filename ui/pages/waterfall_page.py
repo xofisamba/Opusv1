@@ -73,21 +73,33 @@ def render_waterfall(inputs, engine) -> None:
     shl_rate = 0.06 / 2
     
     # Run cached waterfall (rebuilds schedules internally)
-    result = cached_run_waterfall(
-        inputs=inputs,
-        engine=engine,
-        rate_per_period=rate,
-        tenor_periods=tenor_periods,
-        target_dscr=target_dscr,
-        lockup_dscr=lockup_dscr,
-        tax_rate=tax.corporate_rate,
-        dsra_months=financing.dsra_months,
-        shl_amount=shl_amount,
-        shl_rate=shl_rate,
-        discount_rate_project=0.0641,
-        discount_rate_equity=0.0965,
+    st.info(
+        "ℹ️ Rezultati se ažuriraju automatski nakon klika na **🔄 Update Model** u sidebaru.",
+        icon="ℹ️",
     )
-    
+
+    try:
+        result = cached_run_waterfall(
+            inputs=inputs,
+            engine=engine,
+            rate_per_period=rate,
+            tenor_periods=tenor_periods,
+            target_dscr=target_dscr,
+            lockup_dscr=lockup_dscr,
+            tax_rate=tax.corporate_rate,
+            dsra_months=financing.dsra_months,
+            shl_amount=shl_amount,
+            shl_rate=shl_rate,
+            discount_rate_project=0.0641,
+            discount_rate_equity=0.0965,
+        )
+    except Exception as exc:
+        st.error(
+            f"❌ Waterfall izračun nije uspio: **{type(exc).__name__}**: {exc}\n\n"
+            "Provjerite da EBITDA schedule nije nula i da je gearing ispod 90%."
+        )
+        st.stop()
+
     # Display summary
     st.subheader("📊 Waterfall Summary")
     

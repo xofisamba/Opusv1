@@ -140,6 +140,11 @@ def render_sidebar():
                     del st.session_state[key]
             st.rerun()
 
+        # Clear cache button
+        if st.button("🗑️ Clear Cache", use_container_width=True, help="Briše cache izračuna"):
+            st.cache_data.clear()
+            st.success("Cache obrisan.")
+
 
 # ============================================================================
 # MAIN APPLICATION
@@ -150,6 +155,12 @@ def main():
         page_title="Solar/Wind Financial Model",
         page_icon="📊",
         layout="wide",
+        initial_sidebar_state="expanded",
+        menu_items={
+            "Get Help": "https://github.com/xofisamba/Opusv1",
+            "Report a bug": "https://github.com/xofisamba/Opusv1/issues",
+            "About": "# Oborovo Financial Model\nProject finance model za solarne i wind projekte.",
+        }
     )
 
     init_session_state()
