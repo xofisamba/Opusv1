@@ -76,45 +76,59 @@ def calculate_idc_detailed(
     capex_schedule: dict[int, float],
     gearing_ratio: float,
     all_in_rate: float,
+    max_iterations: int = 20,
+    tolerance: float = 1.0,
 ) -> float:
-    """Calculate IDC using detailed period-by-period drawdown.
-    
-    This is more accurate than the fixed-point approximation because it
-    accounts for the actual spending profile of CAPEX.
-    
+    """Calculate IDC using detailed period-by-period drawdown with iteration.
+
+    This handles circular reference: IDC increases CAPEX -> more debt -> more IDC.
+    Iterates until convergence (tolerance in kEUR).
+
     Args:
         capex_schedule: Dict mapping period_index → CAPEX in kEUR (construction only)
         gearing_ratio: Debt / Total CAPEX ratio
         all_in_rate: Annual interest rate
-    
+        max_iterations: Maximum iterations for convergence
+        tolerance: Convergence threshold in kEUR
+
     Returns:
         IDC in kEUR
     """
     if not capex_schedule:
         return 0.0
-    
-    # Calculate cumulative CAPEX and debt drawn
-    cumulative_capex = 0.0
-    cumulative_debt = 0.0
-    idc_total = 0.0
-    
-    for period_idx in sorted(capex_schedule.keys()):
-        capex = capex_schedule[period_idx]
-        
-        # New CAPEX in this period
-        cumulative_capex += capex
-        
-        # New debt drawn (gearing × new CAPEX)
-        debt_drawn = capex * gearing_ratio
-        cumulative_debt += debt_drawn
-        
-        # Interest on outstanding debt (6 months = half year)
-        period_interest = cumulative_debt * all_in_rate * 0.5
-        
-        # Capitalize interest into CAPEX (IDC)
-        idc_total += period_interest
-    
-    return idc_total
+
+    idc_prev = 0.0
+
+    for _ in range(max_iterations):
+        cumulative_capex = 0.0
+        cumulative_debt = 0.0
+        idc_total = 0.0
+
+        for period_idx in sorted(capex_schedule.keys()):
+            capex = capex_schedule[period_idx]
+
+            # New CAPEX in this period (including IDC from previous iteration)
+            cumulative_capex += capex
+
+            # New debt drawn: gearing × (CAPEX + prior IDC for this period)
+            # IDC is distributed across construction periods
+            idc_this_period = idc_prev / len(capex_schedule) if idc_prev > 0 else 0
+            debt_drawn = (capex + idc_this_period) * gearing_ratio
+            cumulative_debt += debt_drawn
+
+            # Interest on outstanding debt (6 months = half year)
+            period_interest = cumulative_debt * all_in_rate * 0.5
+
+            # Capitalize interest into CAPEX (IDC)
+            idc_total += period_interest
+
+        # Check convergence
+        if abs(idc_total - idc_prev) < tolerance:
+            return idc_total
+
+        idc_prev = idc_total
+
+    return idc_prev  # Return last converged value
 
 
 def idc_annuity_adjustment(

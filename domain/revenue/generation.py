@@ -22,48 +22,49 @@ def period_generation(
     year_index: int,
     yield_scenario: str = "P50",
 ) -> float:
-    """Calculate generation for a single period in MWh.
-    
+    """Calculate annual generation (sum of H1 + H2) in MWh.
+
+    For semi-annual models, year has 2 periods. Sum both H1 and H2.
+
     Args:
         tech: Technical parameters
         periods: All periods (for looking up year_index)
         year_index: Year index (1-based, 1=Y1)
         yield_scenario: "P50" or "P90-10y"
-    
+
     Returns:
-        Generation in MWh for this period
+        Generation in MWh for this year (H1 + H2)
     """
-    # Find period for this year_index
+    # Find all operation periods for this year_index (H1 + H2)
     op_periods = [p for p in periods if p.is_operation and p.year_index == year_index]
     if not op_periods:
         return 0.0
-    
-    # Use first operation period for this year (H1)
-    period = op_periods[0]
-    
+
     # Operating hours based on scenario
     if yield_scenario == "P90-10y":
         hours = tech.operating_hours_p90_10y
     else:
         hours = tech.operating_hours_p50
-    
+
     # Combined availability (plant × grid)
     availability = tech.plant_availability * tech.grid_availability
-    
+
     # Degradation factor: (1 - degradation)^(year_index - 1)
-    # Y1 has no degradation, Y2 has 1 year of degradation, etc.
     degradation_factor = (1 - tech.pv_degradation) ** (year_index - 1)
-    
-    # Generation = capacity × hours × day_fraction × availability × degradation
-    generation = (
-        tech.capacity_mw
-        * hours
-        * period.day_fraction
-        * availability
-        * degradation_factor
-    )
-    
-    return generation
+
+    # Sum generation for all periods in this year (H1 + H2)
+    total_generation = 0.0
+    for period in op_periods:
+        generation = (
+            tech.capacity_mw
+            * hours
+            * period.day_fraction
+            * availability
+            * degradation_factor
+        )
+        total_generation += generation
+
+    return total_generation
 
 
 def annual_generation_mwh(
