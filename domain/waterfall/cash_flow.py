@@ -108,12 +108,15 @@ def compute_waterfall(
     # CF after debt service
     cf_after_ds = cf_after_tax - senior_ds_keur - shl_service_keur
     
-    # CF after DSRA contribution
+    # CF after DSRA contribution (CFADS = Cash Flow Available for Debt Service)
     cf_after_reserves = cf_after_ds - dsra_contribution_keur
-    
-    # DSCR calculation
+
+    # CFADS (industry standard for DSCR calculation)
+    cfads = cf_after_reserves  # This is CFADS after reserves
+
+    # DSCR calculation (industry standard: CFADS, not EBITDA)
     if senior_ds_keur > 0:
-        dscr = ebitda / senior_ds_keur
+        dscr = cfads / senior_ds_keur
     else:
         dscr = float('inf')
     

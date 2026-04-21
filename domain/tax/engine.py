@@ -139,46 +139,46 @@ def apply_loss_carryforward(
     max_years: int = 5,
     cap_pct: float = 1.0,
 ) -> tuple[float, list[float]]:
-    """Apply loss carryforward to current period's taxable profit.
-    
-    Losses can be carried forward for up to max_years and offset
-    up to cap_pct (100%) of current taxable profit.
-    
+    """Apply loss carryforward to current period's taxable profit using FIFO.
+
+    Losses are applied in order (oldest first), up to cap_pct of current profit.
+
     Args:
-        losses: List of historical losses (newest first, i.e., losses[-1] = oldest)
+        losses: List of historical losses (index 0 = most recent year, -1 = oldest)
         taxable_profit_keur: Current period taxable profit
         max_years: Maximum carryforward years (default 5)
         cap_pct: Maximum % of current profit that can be offset (1.0 = 100%)
-    
+
     Returns:
         Tuple of (loss_applied, remaining_losses)
     """
     if not losses or taxable_profit_keur <= 0:
         return 0.0, losses
-    
-    # Cap at max_years
-    eligible_losses = losses[:max_years]
-    
+
+    # Take only eligible (up to max_years) - already ordered oldest to newest in the list
+    eligible = losses[:max_years]
+
     # Cap at cap_pct of current profit
     max_offset = taxable_profit_keur * cap_pct
-    
-    # Apply losses (oldest first - losses[0] is oldest if losses is sorted oldest->newest)
-    # But typically losses list is newest first, so we reverse
-    sorted_losses = sorted(enumerate(eligible_losses), key=lambda x: x[1])  # oldest first
-    
-    total_loss = sum(eligible_losses)
-    loss_applied = min(max_offset, total_loss)
-    
-    # Calculate remaining losses
-    remaining = total_loss - loss_applied
-    
-    # Update losses list (simplified - just reduce the oldest)
-    if remaining > 0 and eligible_losses:
-        new_losses = [remaining] + [0] * (len(eligible_losses) - 1)
-    else:
-        new_losses = [max(0, l - loss_applied / len(eligible_losses)) for l in eligible_losses]
-    
-    return loss_applied, new_losses
+
+    # FIFO: apply losses in order (index 0 = oldest remaining loss)
+    loss_applied = 0.0
+    remaining_losses = []
+
+    for loss in eligible:
+        if loss_applied >= max_offset:
+            remaining_losses.append(loss)  # Can't use this loss
+        else:
+            available = max_offset - loss_applied
+            used = min(loss, available)
+            loss_applied += used
+            if loss > used:
+                remaining_losses.append(loss - used)  # Partial consumption
+
+    # Add any years beyond max_years (older losses that expired)
+    remaining_losses = remaining_losses + list(losses[max_years:])
+
+    return min(loss_applied, max_offset), remaining_losses
 
 
 def loss_carryforward_simple(

@@ -21,39 +21,38 @@ def fiscal_reintegration(
     is_construction: bool,
 ) -> float:
     """Calculate fiscal reintegration for a period.
-    
+
+    Non-deductible items (IDC, bank fees, commitment fees) during construction
+    are capitalized and NOT expensed. When calculating taxable profit, they
+    must be added back (reintegrated) since they were never deductible.
+
     Args:
         period_index: Period index
         capex_distribution: CAPEX by period (kEUR)
         non_deductible_items: List of non-deductible item names
         is_construction: True if this is a construction period
-    
+
     Returns:
-        Amount to add back to taxable profit in this period
+        Amount to add back to taxable profit in this period (kEUR)
     """
     if not is_construction:
         return 0.0
-    
-    # During construction, non-deductible items are capitalized
-    # So they don't reduce taxable profit (no reintegration needed)
-    # After construction, depreciation begins (deductible, no add-back needed)
-    # 
-    # The reintegration concept is:
-    # - Construction: costs capitalized, not expensed → 0 impact → nothing to add back
-    # - Post-construction: depreciation of capitalized costs → deductible → no add-back
-    # 
-    # Actually, fiscal reintegration means ADDING BACK non-deductible items
-    # to taxable profit when they ARE expensed. But if capitalized, they aren't expensed.
-    # 
-    # For Oborovo, during construction:
-    # - IDC is capitalized → not deductible → must add back when calculating tax
-    # - But wait, IDC is not expensed during construction, it's capitalized
-    # 
-    # The concept is: pre-COD items are not deductible ever for tax purposes
-    # (they're added back to taxable profit in P&L as "fiscal reintegration")
-    
-    # For simplicity, return 0 during construction (costs are capitalized)
-    return 0.0
+
+    # During construction: non-deductible items are capitalized
+    # Must add them back to taxable profit (fiscal reintegration)
+    capex = capex_distribution.get(period_index, 0.0)
+
+    # Typical non-deductible items: IDC, bank fees, commitment fees
+    # These are a fraction of CAPEX (e.g., IDC = 6% of capex * construction_period/2)
+    # Simple estimate: use total capex * average fraction
+    non_deductible_fraction = 0.0
+    for item in non_deductible_items:
+        if 'idc' in item.lower():
+            non_deductible_fraction += 0.03  # ~3% IDC
+        elif 'fee' in item.lower() or 'bank' in item.lower():
+            non_deductible_fraction += 0.02  # ~2% fees
+
+    return capex * non_deductible_fraction
 
 
 def fiscal_reintegration_schedule(

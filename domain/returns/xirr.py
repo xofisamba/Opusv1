@@ -1,51 +1,8 @@
-"""XIRR (Date-based Internal Rate of Return) implementation.
-
-This module provides XIRR and XNPV functions that match Excel's financial
-functions behavior exactly. Excel uses 365-day year convention and Newton-Raphson
-iteration for XIRR.
-
-Reference: Excel XIRR uses the formula where IRR is the rate such that:
-    sum(cf_i / (1 + rate)^d_i / 365) = 0
-    where d_i = days from start date to payment date i
-"""
+"""XIRR calculation using Newton-Raphson method with fallback to bisection."""
 from datetime import date
 from typing import List, Optional, Sequence
 
-
-def xnpv(rate: float, cash_flows: Sequence[float], dates: Sequence[date]) -> float:
-    """Calculate Net Present Value with date-based discounting.
-    
-    Uses Excel's 365-day year convention: year_fraction = days / 365.
-    
-    Args:
-        rate: Discount rate (annualized)
-        cash_flows: Sequence of cash flows (first is at dates[0])
-        dates: Corresponding dates (must be same length as cash_flows)
-    
-    Returns:
-        Net Present Value
-    
-    Raises:
-        ValueError: If cash_flows and dates have different lengths
-        ZeroDivisionError: If rate = -1 (infinite NPV)
-    
-    Example:
-        >>> cfs = [-10000, 5000, 5000, 5000]
-        >>> dates = [date(2020,1,1), date(2020,6,30), date(2021,6,30), date(2022,6,30)]
-        >>> xnpv(0.08, cfs, dates)
-        2950.23...
-    """
-    if not cash_flows or len(cash_flows) != len(dates):
-        raise ValueError("cash_flows and dates must have the same length")
-    
-    if rate <= -1.0:
-        return float('inf')
-    
-    d0 = dates[0]
-    return sum(
-        cf / (1 + rate) ** ((d - d0).days / 365.0)
-        for cf, d in zip(cash_flows, dates)
-    )
+from domain.returns.xnpv import xnpv
 
 
 def xirr(
@@ -190,3 +147,21 @@ def xirr_bisection(
             low = mid
     
     return (low + high) / 2
+
+
+def robust_xirr(
+    cash_flows: Sequence[float],
+    dates: Sequence[date],
+    guess: float = 0.10,
+) -> Optional[float]:
+    """XIRR with automatic fallback to bisection method.
+
+    Tries Newton-Raphson; if it fails to converge, falls back to bisection.
+    Bisection is slower but more robust for unconventional CF profiles
+    (debt sweeps in late years, lockup-triggered negative cashflows).
+    """
+    result = xirr(cash_flows, dates, guess=guess)
+    if result is not None:
+        return result
+    # Fallback to bisection
+    return xirr_bisection(cash_flows, dates)

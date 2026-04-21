@@ -202,11 +202,15 @@ def iterative_sculpt_debt(
             break
         
         # Binary search direction
+        # D-07 fix: Higher debt -> higher payment -> lower DSCR
+        # So if avg_dscr < target (DSCR too low), we need LESS debt (high = mid)
+        # If avg_dscr > target (DSCR too high), we need MORE debt (low = mid)
         if avg_dscr < target_dscr:
-            # Need more debt to increase payment capacity (lower DSCR)
-            low = mid
-        else:
+            # DSCR too low -> need smaller debt -> smaller payment -> higher DSCR
             high = mid
+        else:
+            # DSCR too high -> need larger debt -> larger payment -> lower DSCR
+            low = mid
         
         iterations = iteration + 1
     
