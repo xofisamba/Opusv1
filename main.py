@@ -155,6 +155,11 @@ def main():
     init_session_state()
     render_sidebar()
 
+    # Build inputs/engine on first load if not present
+    if 'inputs' not in st.session_state or st.session_state.inputs is None:
+        st.session_state.inputs = _build_inputs_from_session()
+        st.session_state.engine = _build_engine_from_inputs(st.session_state.inputs)
+
     # Header
     st.title(f"📊 {st.session_state.project_name}")
     st.caption(f"Company: {st.session_state.project_company} | Technology: {st.session_state.technology}")

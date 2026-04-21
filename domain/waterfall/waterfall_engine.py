@@ -348,8 +348,9 @@ def run_waterfall(
         dsra_balance += dsra_contrib
         cf_after_reserves = cf_after_ds - dsra_contrib
         
-        # DSCR calculation
-        dscr = ebitda / senior_ds if senior_ds > 0 else 0
+        # DSCR calculation — industrijski standard: CFADS / Debt Service
+        # CFADS = CF after tax, after reserves (cf_after_reserves)
+        dscr = cf_after_reserves / senior_ds if senior_ds > 0 else 0
         all_dsrs.append(dscr)
         
         # Lockup check
