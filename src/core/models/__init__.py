@@ -12,6 +12,9 @@ from .project import (
     YieldScenario,
     create_project_info,
 )
+from .capex import CapexItem, CapexStructure
+from .opex import OpexItem
+from .financing import FinancingParams, TaxParams
 
 __all__ = [
     # Base
@@ -23,4 +26,12 @@ __all__ = [
     "PeriodFrequency",
     "YieldScenario",
     "create_project_info",
+    # Capex
+    "CapexItem",
+    "CapexStructure",
+    # Opex
+    "OpexItem",
+    # Financing
+    "FinancingParams",
+    "TaxParams",
 ]
