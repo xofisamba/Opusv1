@@ -45,13 +45,13 @@ def render_sidebar():
         st.divider()
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("📂 Collapse", use_container_width=True, help="Zatvori sve sekcije"):
+            if st.button("− Collapse All", use_container_width=True, help="Zatvori sve sekcije"):
                 for k in ['exp_project', 'exp_revenue', 'exp_yield', 'exp_financing', 
                           'exp_tax', 'exp_construction', 'exp_reserves', 'exp_horizon']:
                     st.session_state[k] = False
                 st.rerun()
         with col2:
-            if st.button("📁 Expand", use_container_width=True, help="Otvori sve sekcije"):
+            if st.button("+ Expand All", use_container_width=True, help="Otvori sve sekcije"):
                 for k in ['exp_project', 'exp_revenue', 'exp_yield', 'exp_financing', 
                           'exp_tax', 'exp_construction', 'exp_reserves', 'exp_horizon']:
                     st.session_state[k] = True
