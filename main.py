@@ -41,10 +41,24 @@ def render_sidebar():
         selected = st.radio("Navigate", nav_options, index=idx)
         st.session_state.active_sheet = selected
 
+        # Collapse/Expand All buttons
         st.divider()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📂 Collapse", use_container_width=True, help="Zatvori sve sekcije"):
+                for k in ['exp_project', 'exp_revenue', 'exp_yield', 'exp_financing', 
+                          'exp_tax', 'exp_construction', 'exp_reserves', 'exp_horizon']:
+                    st.session_state[k] = False
+                st.rerun()
+        with col2:
+            if st.button("📁 Expand", use_container_width=True, help="Otvori sve sekcije"):
+                for k in ['exp_project', 'exp_revenue', 'exp_yield', 'exp_financing', 
+                          'exp_tax', 'exp_construction', 'exp_reserves', 'exp_horizon']:
+                    st.session_state[k] = True
+                st.rerun()
 
         # Project section
-        with st.expander("📐 Project", expanded=True):
+        with st.expander("📐 Project", expanded=st.session_state.get('exp_project', True)):
             st.text_input("Project Name", key="project_name")
             st.text_input("Company", key="project_company")
 
@@ -62,7 +76,7 @@ def render_sidebar():
                 st.number_input("Hub Height (m)", key="hub_height", min_value=50, max_value=200, step=5)
 
         # Revenue section
-        with st.expander("💰 Revenue", expanded=True):
+        with st.expander("💰 Revenue", expanded=st.session_state.get('exp_revenue', False)):
             st.number_input("PPA Tariff (€/MWh)", key="ppa_base_tariff", min_value=1.0, max_value=200.0, step=1.0)
             st.slider("Tariff Escalation (%)", key="tariff_escalation", min_value=0.0, max_value=20.0, value=2.0, step=0.1, format="%.1f")
             st.number_input("PPA Term (years)", key="ppa_term", min_value=5, max_value=30, step=1)
@@ -71,7 +85,7 @@ def render_sidebar():
                 st.number_input("Merchant Price (€/MWh)", key="merchant_price", min_value=1.0, max_value=200.0, step=1.0)
 
         # Yield section
-        with st.expander("📊 Yield", expanded=True):
+        with st.expander("📊 Yield", expanded=st.session_state.get('exp_yield', False)):
             st.number_input("P50 Yield (hours)", key="yield_p50", min_value=500.0, max_value=5000.0, step=10.0)
             st.number_input("P90 Yield (hours)", key="yield_p90", min_value=500.0, max_value=5000.0, step=10.0)
             st.number_input("P99 Yield (hours)", key="yield_p99", min_value=500.0, max_value=5000.0, step=10.0)
@@ -81,7 +95,7 @@ def render_sidebar():
                 st.slider("Curtailment (%)", key="curtailment", min_value=0.0, max_value=20.0, step=0.5, format="%.1f")
 
         # Financing section
-        with st.expander("🏦 Financing", expanded=True):
+        with st.expander("🏦 Financing", expanded=st.session_state.get('exp_financing', True)):
             st.slider("Gearing (%)", key="gearing_ratio", min_value=0.0, max_value=95.0, value=70.0, step=1.0, format="%.0f")
             st.number_input("Debt Tenor (years)", key="debt_tenor", min_value=5, max_value=30, step=1)
             st.number_input("Base Rate (%)", key="base_rate", min_value=0.0, max_value=15.0, step=0.1, format="%.2f")
@@ -94,7 +108,7 @@ def render_sidebar():
             st.number_input("Commitment Fee (%)", key="commitment_fee", min_value=0.0, max_value=5.0, step=0.1)
 
         # Tax section
-        with st.expander("🏛️ Tax", expanded=True):
+        with st.expander("🏛️ Tax", expanded=st.session_state.get('exp_tax', False)):
             st.slider("Corporate Tax (%)", key="corporate_tax_rate", min_value=0.0, max_value=50.0, value=10.0, step=0.5, format="%.1f")
             st.number_input("Depreciation Period (years)", key="depreciation_period", min_value=1, max_value=50, step=1)
             thin_cap_options = ["None (No restriction)", "EU Standard", "ATAD"]
@@ -102,7 +116,7 @@ def render_sidebar():
             st.selectbox("Thin Cap Rule", thin_cap_options, key="thin_cap_jurisdiction")
 
         # Construction section
-        with st.expander("🏗️ Construction", expanded=True):
+        with st.expander("🏗️ Construction", expanded=st.session_state.get('exp_construction', False)):
             st.date_input("Construction Start", key="construction_start_date")
             st.number_input("Construction Period (months)", key="construction_period", min_value=6, max_value=36, step=1)
             st.checkbox("Semi-Annual Periods", key="semi_annual_mode")
@@ -111,7 +125,7 @@ def render_sidebar():
                 st.slider("IDC Rate (%)", key="idc_rate", min_value=0.0, max_value=15.0, value=6.0, step=0.5, format="%.1f")
 
         # Reserves section
-        with st.expander("💼 Reserves", expanded=False):
+        with st.expander("💼 Reserves", expanded=st.session_state.get('exp_reserves', False)):
             st.checkbox("DSRA (Debt Service Reserve)", key="dsra_enabled")
             if st.session_state.dsra_enabled:
                 st.slider("DSRA Months", key="dsra_months", min_value=3, max_value=12, value=6, step=1)
@@ -123,7 +137,7 @@ def render_sidebar():
                 st.slider("Cash Sweep Threshold", key="cash_sweep_threshold", min_value=1.0, max_value=2.0, value=1.2, step=0.05, format="%.2f")
 
         # Horizon
-        with st.expander("📅 Horizon", expanded=False):
+        with st.expander("📅 Horizon", expanded=st.session_state.get('exp_horizon', False)):
             st.number_input("Investment Horizon (years)", key="investment_horizon", min_value=10, max_value=50, step=1)
 
         st.divider()
