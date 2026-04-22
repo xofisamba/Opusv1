@@ -16,6 +16,7 @@ from .capex import CapexItem, CapexStructure
 from .opex import OpexItem
 from .financing import FinancingParams, TaxParams
 from .revenue import TechnicalParams, RevenueParams
+from .inputs import ProjectInputs
 
 __all__ = [
     # Base
@@ -38,4 +39,6 @@ __all__ = [
     # Revenue
     "TechnicalParams",
     "RevenueParams",
+    # Root
+    "ProjectInputs",
 ]
