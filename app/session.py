@@ -93,8 +93,7 @@ DEFAULTS = {
     'active_sheet': '🏠 Dashboard',
 
     # Expander states (for collapse/expand all)
-    'exp_inputs': True,
-    'exp_project': False,
+    'exp_project': True,
     'exp_revenue': False,
     'exp_yield': False,
     'exp_financing': True,
