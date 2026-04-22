@@ -15,6 +15,7 @@ from .project import (
 from .capex import CapexItem, CapexStructure
 from .opex import OpexItem
 from .financing import FinancingParams, TaxParams
+from .revenue import TechnicalParams, RevenueParams
 
 __all__ = [
     # Base
@@ -34,4 +35,7 @@ __all__ = [
     # Financing
     "FinancingParams",
     "TaxParams",
+    # Revenue
+    "TechnicalParams",
+    "RevenueParams",
 ]

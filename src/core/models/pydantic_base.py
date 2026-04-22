@@ -99,6 +99,10 @@ class FinancialBaseModel(BaseModel):
             return between_message(min_val, max_val)
         elif msg.startswith("Field required"):
             return ERROR_MESSAGES["required"]
+        elif "yield_scenario" in str(loc):
+            return "Nedozvoljeni scenario. Dopuštene opcije: P_50, P90-10y, P99-1y"
+        elif "ppa_term" in str(loc):
+            return "PPA rok mora biti između 1 i 30 godina."
         elif msg.startswith("Input should be one of"):
             choices = ctx.get("expected", "nešto")
             return ERROR_MESSAGES["invalid_enum"].format(choices=choices)
