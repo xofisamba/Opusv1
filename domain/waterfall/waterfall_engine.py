@@ -200,6 +200,7 @@ def run_waterfall(
     shl_rate: float = 0,
     discount_rate_project: float = 0.0641,
     discount_rate_equity: float = 0.0965,
+    financial_close: 'date' = None,
 ) -> WaterfallResult:
     """Run full waterfall with iterative debt sculpting.
     
@@ -254,10 +255,12 @@ def run_waterfall(
     op_period_counter = 0  # BUG-3 fix: counter for operation periods (not year_index)
     
     # For returns calculation
-    project_cfs = [-total_capex]  # Initial investment
-    # BUG-2 fix: Use actual debt from sculpting result, not hardcoded 0.70
-    equity_investment = total_capex - sculpt_result.debt_keur
-    equity_cfs = [-equity_investment]  # Equity = CAPEX - Debt
+    # Floor equity at 0 - debt cannot exceed capex, otherwise equity goes negative
+    equity_investment = max(0, total_capex - sculpt_result.debt_keur)
+    # Start with initial investment - dates array now includes financial_close
+    # So we prepend [-total_capex] at position 0 to match
+    project_cfs = [-total_capex]
+    equity_cfs = [-equity_investment]
     
     # Track all periods
     all_dsrs = []
@@ -430,8 +433,17 @@ def run_waterfall(
         project_cfs.append(cf_after_tax - senior_ds)
         equity_cfs.append(dist)
     
-    # Calculate returns
-    dates = [p.end_date for p in periods]
+    # Calculate returns - prepend financial_close date for initial investment
+    # This makes dates array match project_cfs/equity_cfs (initial + per-period)
+    if financial_close:
+        dates = [financial_close] + [p.end_date for p in periods]
+    else:
+        dates = [p.end_date for p in periods]
+
+    # Verify lengths match before XIRR
+    if len(project_cfs) != len(dates):
+        _log.warning("XIRR length mismatch: project_cfs=%d, dates=%d",
+                    len(project_cfs), len(dates))
 
     # WARN-1 fix: xirr returns None when no convergence - handle with `or 0.0`
     try:
@@ -605,4 +617,5 @@ def cached_run_waterfall(
         shl_rate=shl_rate,
         discount_rate_project=discount_rate_project,
         discount_rate_equity=discount_rate_equity,
+        financial_close=inputs.info.financial_close,
     )
