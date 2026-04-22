@@ -28,6 +28,8 @@ from domain.financing.schedule import senior_debt_amount
 from domain.returns.xirr import xirr, xnpv
 from utils.logging_config import get_logger
 
+_log = get_logger(__name__)  # Module-level logger (defined once, not per-function)
+
 
 @dataclass
 class WaterfallPeriod:
@@ -247,10 +249,14 @@ def run_waterfall(
     cum_distribution = 0
     prior_tax_loss = 0
     fiscal_reintegration = 0
+    fiscal_reintegration_applied = False  # BUG-5 fix: flag for fiscal reintegration
+    op_period_counter = 0  # BUG-3 fix: counter for operation periods (not year_index)
     
     # For returns calculation
     project_cfs = [-total_capex]  # Initial investment
-    equity_cfs = [-total_capex * (1 - 0.70)]  # Equity = CAPEX - Debt
+    # BUG-2 fix: Use actual debt from sculpting result, not hardcoded 0.70
+    equity_investment = total_capex - sculpt_result.debt_keur
+    equity_cfs = [-equity_investment]  # Equity = CAPEX - Debt
     
     # Track all periods
     all_dsrs = []
@@ -303,8 +309,8 @@ def run_waterfall(
         ebitda = ebitda_schedule[i]
         dep = depreciation_schedule[i] if i < len(depreciation_schedule) else 0
         
-        # Senior debt service
-        period_in_tenor = period.year_index - 1  # 0-based year index
+        # Senior debt service - BUG-3 fix: use op_period_counter for semi-annual indexing
+        period_in_tenor = op_period_counter
         if period_in_tenor < tenor_periods:
             si = interest_schedule[period_in_tenor]
             sp = principal_schedule[period_in_tenor]
@@ -313,6 +319,7 @@ def run_waterfall(
             si = 0
             sp = 0
             senior_ds = 0
+        op_period_counter += 1
         
         # SHL service
         if shl_amount > 0 and period_in_tenor < tenor_periods:
@@ -325,8 +332,12 @@ def run_waterfall(
             shl_svc = 0
         
         # Tax calculation
-        # Fiscal reintegration: pre-COD items added back to taxable profit
-        fiscal_reintegration = dep * 0.5 if fiscal_reintegration == 0 else 0
+        # BUG-5 fix: fiscal reintegration applies only once, using flag
+        if not fiscal_reintegration_applied:
+            fiscal_reintegration = dep * 0.5
+            fiscal_reintegration_applied = True
+        else:
+            fiscal_reintegration = 0.0
         
         tax, prior_tax_loss = compute_tax(
             ebitda, dep, si, shi, fiscal_reintegration,
@@ -420,11 +431,10 @@ def run_waterfall(
     
     # Calculate returns
     dates = [p.end_date for p in periods]
-    
-    _log = get_logger(__name__)
 
+    # WARN-1 fix: xirr returns None when no convergence - handle with `or 0.0`
     try:
-        project_irr = xirr(project_cfs, dates, guess=0.08)
+        project_irr = xirr(project_cfs, dates, guess=0.08) or 0.0
         project_npv = xnpv(discount_rate_project, project_cfs, dates)
     except Exception as exc:
         _log.warning("XIRR/XNPV failed for project CFs: %s", exc)
@@ -432,7 +442,7 @@ def run_waterfall(
         project_npv = 0.0
 
     try:
-        equity_irr = xirr(equity_cfs, dates, guess=0.10)
+        equity_irr = xirr(equity_cfs, dates, guess=0.10) or 0.0
         equity_npv = xnpv(discount_rate_equity, equity_cfs, dates)
     except Exception as exc:
         _log.warning("XIRR/XNPV failed for equity CFs: %s", exc)
@@ -452,8 +462,9 @@ def run_waterfall(
         avg_dscr=sculpt_result.avg_dscr,
         min_dscr=sculpt_result.min_dscr,
         max_dscr=sculpt_result.max_dscr,
-        min_llcr=min(wp.llcr for wp in waterfall_periods if wp.llcr > 0) or 0,
-        min_plcr=min(wp.plcr for wp in waterfall_periods if wp.plcr > 0) or 0,
+        # WARN-2 fix: filter out inf values for min calculation
+        min_llcr=min((wp.llcr for wp in waterfall_periods if 0 < wp.llcr < float('inf')), default=0.0),
+        min_plcr=min((wp.plcr for wp in waterfall_periods if 0 < wp.plcr < float('inf')), default=0.0),
         periods_in_lockup=lockup_count,
         project_irr=project_irr,
         equity_irr=equity_irr,
