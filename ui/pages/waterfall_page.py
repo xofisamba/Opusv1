@@ -3,76 +3,22 @@ import streamlit as st
 import pandas as pd
 
 from domain.waterfall.waterfall_engine import cached_run_waterfall, print_waterfall_summary
-from domain.capex.spending_profile import construction_capex_schedule as full_capex_schedule
 
 
 def render_waterfall(inputs, engine) -> None:
     st.header("💵 Cash Flow Waterfall")
     
-    s = st.session_state
-    capex = inputs.capex
     financing = inputs.financing
     tax = inputs.tax
     
-    # Get all periods
-    periods = list(engine.periods())
-    op_periods = [p for p in periods if p.is_operation]
-    
-    # Build schedules
-    revenue = full_revenue_schedule(inputs, engine)
-    generation = full_generation_schedule(inputs, engine)
-    opex_annual = opex_schedule_annual(inputs, inputs.info.horizon_years)
-# CAPEX schedule not needed directly - use total_capex from inputs
-    # capex_spend = full_capex_schedule(inputs, engine)
-    
-    # Semi-annual OPEX mapping
-    opex_schedule = {}
-    for p in periods:
-        if p.is_operation:
-            opex_schedule[p.index] = opex_annual.get(p.year_index, 0) / 2
-    
-    # Semi-annual revenue mapping
-    rev_schedule = []
-    gen_schedule = []
-    for p in periods:
-        if p.is_operation:
-            rev_schedule.append(revenue.get(p.index, 0))
-            gen_schedule.append(generation.get(p.index, 0))
-        else:
-            rev_schedule.append(0)
-            gen_schedule.append(0)
-    
-    # EBITDA schedule (semi-annual)
-    ebitda_schedule = []
-    for p in periods:
-        if p.is_operation:
-            ebitda = max(0, revenue.get(p.index, 0) - opex_annual.get(p.year_index, 0) / 2)
-        else:
-            ebitda = 0
-        ebitda_schedule.append(ebitda)
-    
-    # Depreciation schedule (annual / 2 per period)
-    dep_per_year = capex.total_capex / inputs.info.horizon_years
-    dep_schedule = []
-    for p in periods:
-        if p.is_operation:
-            dep_schedule.append(dep_per_year / 2)
-        else:
-            dep_schedule.append(0)
-    
-    # Financing parameters
-    total_capex = capex.total_capex
+    # Parameters for cached_run_waterfall
     rate = financing.all_in_rate / 2  # Semi-annual
     tenor_periods = financing.senior_tenor_years * 2
     target_dscr = financing.target_dscr
     lockup_dscr = financing.lockup_dscr
-    dsra_months = financing.dsra_months
-    
-    # SHL parameters
     shl_amount = 0  # No SHL in base case
     shl_rate = 0.06 / 2
     
-    # Run cached waterfall (rebuilds schedules internally)
     st.info(
         "ℹ️ Rezultati se ažuriraju automatski nakon klika na **🔄 Update Model** u sidebaru.",
         icon="ℹ️",
@@ -102,6 +48,8 @@ def render_waterfall(inputs, engine) -> None:
 
     # Display summary
     st.subheader("📊 Waterfall Summary")
+    
+    total_capex = inputs.capex.total_capex
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
