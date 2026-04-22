@@ -163,8 +163,8 @@ class OpexItem:
     name: str                      # Item description
     y1_amount_keur: float         # Amount in kEUR for Year 1
     annual_inflation: float = 0.02  # Annual escalation rate (0.02 = 2%)
-    step_changes: dict[int, float] = field(default_factory=dict)
-    # e.g. {3: 185.64} means Y3 OPEX is hardcoded to 185.64 k€
+    step_changes: tuple[tuple[int, float], ...] = field(default_factory=lambda: ())
+    # e.g. ((3, 185.64),) means Y3 OPEX is hardcoded to 185.64 k€
 
     def amount_at_year(self, year: int) -> float:
         """Return OPEX amount for a given year with escalation.
@@ -176,8 +176,9 @@ class OpexItem:
             Amount in kEUR for that year
         """
         # Check for step change
-        if year in self.step_changes:
-            return self.step_changes[year]
+        for step_year, amount in self.step_changes:
+            if year == step_year:
+                return amount
         # Apply escalation from Y1
         return self.y1_amount_keur * (1 + self.annual_inflation) ** (year - 1)
 
@@ -399,7 +400,7 @@ class ProjectInputs:
         opex_items = (
             OpexItem(name="Technical Management", y1_amount_keur=198.0, annual_inflation=0.02),
             OpexItem(name="Infrastructure Maintenance", y1_amount_keur=244.0, annual_inflation=0.02,
-                    step_changes={3: 185.64}),  # Step down in Y3
+                    step_changes=((3, 185.64),)),  # Step down in Y3
             OpexItem(name="Maintain Site", y1_amount_keur=45.2, annual_inflation=0.02),
             OpexItem(name="Clean Material", y1_amount_keur=40.0, annual_inflation=0.02),
             OpexItem(name="Security", y1_amount_keur=30.1, annual_inflation=0.02),
@@ -410,7 +411,7 @@ class ProjectInputs:
             OpexItem(name="Audit&Accounting&Legal", y1_amount_keur=24.0, annual_inflation=0.02),
             OpexItem(name="Bank Fees", y1_amount_keur=20.0, annual_inflation=0.02),
             OpexItem(name="Environmental&Social", y1_amount_keur=15.0, annual_inflation=0.02,
-                    step_changes={3: 5.2}),  # Step down in Y3
+                    step_changes=((3, 5.2),)),  # Step down in Y3
             OpexItem(name="Contingencies", y1_amount_keur=52.07, annual_inflation=0.02),
             OpexItem(name="Taxes", y1_amount_keur=0.0, annual_inflation=0.0),
             OpexItem(name="Salary&Payroll", y1_amount_keur=0.0, annual_inflation=0.0),

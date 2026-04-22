@@ -249,3 +249,11 @@ class PeriodEngine:
     def period_dates(self) -> List[date]:
         """Returns end_dates for all periods (matches Excel CF row 134)."""
         return [p.end_date for p in self.periods()]
+
+# =============================================================================
+# Caching hash function (used by @st.cache_data in UI layer)
+# =============================================================================
+
+def hash_engine_for_cache(e: "PeriodEngine") -> tuple:
+    """Deterministic hash for PeriodEngine - for @st.cache_data hash_funcs."""
+    return (e.fc, e.construction_months, e.horizon_years, e.ppa_years, e.freq)

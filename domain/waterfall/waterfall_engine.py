@@ -26,6 +26,7 @@ from domain.financing.sculpting_iterative import (
 )
 from domain.financing.schedule import senior_debt_amount
 from domain.returns.xirr import xirr, xnpv
+from domain.period_engine import hash_engine_for_cache
 from utils.logging_config import get_logger
 
 _log = get_logger(__name__)  # Module-level logger (defined once, not per-function)
@@ -511,14 +512,9 @@ def print_waterfall_summary(result: WaterfallResult) -> str:
 # CACHED WRAPPER (Sprint 2)
 # =============================================================================
 
-def _hash_engine(e) -> tuple:
-    """Hash function for PeriodEngine - needed for @st.cache_data."""
-    return (e.fc, e.construction_months, e.horizon_years, e.ppa_years, e.freq)
-
-
 @st.cache_data(
     show_spinner="⚙️ Računam waterfall...",
-    hash_funcs={"domain.period_engine.PeriodEngine": _hash_engine}
+    hash_funcs={"domain.period_engine.PeriodEngine": hash_engine_for_cache}
 )
 def cached_run_waterfall(
     inputs: "ProjectInputs",
@@ -578,9 +574,10 @@ def cached_run_waterfall(
         rev = revenue_dict.get(p.index, 0)
         gen = generation_dict.get(p.index, 0)
         if p.is_operation:
-            opex = opex_annual.get(p.year_index, 0) * p.day_fraction
+            # Semi-annual: split annual values evenly
+            opex = opex_annual.get(p.year_index, 0) / 2
             ebitda = max(0, rev - opex)
-            dep = dep_per_year * p.day_fraction
+            dep = dep_per_year / 2
         else:
             opex = 0
             ebitda = 0

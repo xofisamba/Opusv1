@@ -11,11 +11,7 @@ Total Y1 OPEX for Oborovo: 1,353.91 kEUR
 import streamlit as st
 from typing import Sequence
 from domain.inputs import OpexItem, ProjectInputs
-from domain.period_engine import PeriodEngine, PeriodMeta
-
-
-def _hash_engine(e: PeriodEngine) -> tuple:
-    return (e.fc, e.construction_months, e.horizon_years, e.ppa_years, e.freq)
+from domain.period_engine import PeriodEngine, PeriodMeta, hash_engine_for_cache
 
 
 def opex_year(
@@ -93,7 +89,7 @@ def opex_per_mwh_y1(
     return (opex_y1 * 1000) / generation_y1_mwh
 
 
-@st.cache_data(show_spinner=False, hash_funcs={PeriodEngine: _hash_engine})
+@st.cache_data(show_spinner=False, hash_funcs={PeriodEngine: hash_engine_for_cache})
 def opex_schedule_period(
     inputs: ProjectInputs,
     engine: PeriodEngine,
@@ -123,13 +119,7 @@ def opex_schedule_period(
         annual_opex = annual_schedule.get(period.year_index, 0.0)
         
         # Split semi-annually (50/50 for simplicity)
-        # Some items may have different patterns but 50/50 is standard
-        if period.period_in_year == 1:
-            # H1: 50% of annual
-            schedule[period.index] = annual_opex * 0.5
-        else:
-            # H2: 50% of annual
-            schedule[period.index] = annual_opex * 0.5
+        schedule[period.index] = annual_opex * 0.5
     
     return schedule
 
@@ -171,7 +161,7 @@ def total_opex_over_horizon(
         annual_opex = opex_year(inputs.opex, year)
         
         if discount_rate > 0:
-            annual_opex /= (1 + discount_rate) ** (year - 1)
+            annual_opex /= (1 + discount_rate) ** year
         
         total += annual_opex
     
