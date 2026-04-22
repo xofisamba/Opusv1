@@ -18,6 +18,10 @@ from src.core.models import (
     TechnicalParams, RevenueParams, FinancingParams, TaxParams,
     ProjectInputs, ValidationError as PydanticValidationError
 )
+from src.core.models.inputs import ProjectInputs as NewProjectInputs
+from domain.waterfall.waterfall_engine import cached_run_waterfall
+from domain.period_engine import PeriodEngine
+from app.builder import _build_engine_from_inputs
 
 
 # =============================================================================
@@ -330,6 +334,64 @@ def main():
         
         st.divider()
         render_json_export(inputs)
+        
+        # ================================================================
+        # WATERFALL RESULTS
+        # ================================================================
+        st.divider()
+        st.subheader("📊 Waterfall Rezultati")
+        
+        try:
+            # Build engine from inputs
+            engine = _build_engine_from_inputs(inputs)
+            
+            # Run waterfall calculation
+            rate = inputs.financing.all_in_rate / 2
+            tenor_periods = inputs.financing.senior_tenor_years * 2
+            
+            result = cached_run_waterfall(
+                inputs=inputs,
+                engine=engine,
+                rate_per_period=rate,
+                tenor_periods=tenor_periods,
+                target_dscr=inputs.financing.target_dscr,
+                lockup_dscr=inputs.financing.lockup_dscr,
+                tax_rate=inputs.tax.corporate_rate,
+                dsra_months=inputs.financing.dsra_months,
+                shl_amount=0,
+                shl_rate=0.06 / 2,
+                discount_rate_project=0.0641,
+                discount_rate_equity=0.0965,
+            )
+            
+            # Display waterfall metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Debt (k€)", f"{result.sculpting_result.debt_keur:,.0f}")
+            with col2:
+                st.metric("Avg DSCR", f"{result.avg_dscr:.3f}x")
+            with col3:
+                st.metric("Project IRR", f"{result.project_irr * 100:.2f}%")
+            with col4:
+                st.metric("Equity IRR", f"{result.equity_irr * 100:.2f}%")
+            
+            col5, col6, col7, col8 = st.columns(4)
+            with col5:
+                st.metric("Min LLCR", f"{result.min_llcr:.2f}x")
+            with col6:
+                st.metric("Min PLCR", f"{result.min_plcr:.2f}x")
+            with col7:
+                st.metric("Min DSCR", f"{result.min_dscr:.3f}x")
+            with col8:
+                status = "✅" if result.sculpting_result.converged else "⚠️"
+                st.metric("Sculpting", f"{status} {result.sculpting_result.iterations} iter")
+            
+            st.success("✅ Waterfall izračun završen!")
+            
+        except Exception as exc:
+            st.error(f"❌ Waterfall greška: {type(exc).__name__}: {exc}")
+        
+        st.divider()
         
         st.divider()
         st.subheader("📋 Detalji")

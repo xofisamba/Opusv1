@@ -2,7 +2,7 @@
 
 Corresponds to Excel Inputs rows 23-44.
 """
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, computed_field
 from typing import Optional
 
 from .pydantic_base import FinancialBaseModel
@@ -160,7 +160,7 @@ class CapexStructure(FinancialBaseModel):
     )
 
     def total_capex_keur(self) -> float:
-        """Calculate total CAPEX including all items."""
+        """Calculate total CAPEX excluding IDC (legacy compatibility)."""
         items = [
             self.epc_contract, self.production_units, self.epc_other,
             self.grid_connection, self.ops_prep, self.insurances,
@@ -169,8 +169,14 @@ class CapexStructure(FinancialBaseModel):
             self.taxes, self.project_acquisition, self.project_rights,
         ]
         hard_total = sum(item.amount_keur for item in items)
-        return hard_total + self.idc_keur + self.commitment_fees_keur + \
+        return hard_total + self.commitment_fees_keur + \
                self.bank_fees_keur + self.vat_costs_keur + self.reserve_accounts_keur
+
+    @computed_field
+    @property
+    def total_capex(self) -> float:
+        """Total CAPEX including IDC (legacy accessor)."""
+        return self.total_capex_keur() + self.idc_keur
 
     def get_capex_summary(self) -> dict:
         """Get CAPEX summary for display."""
