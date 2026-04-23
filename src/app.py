@@ -1023,11 +1023,14 @@ def main():
         regulatory_config = render_regulatory_config()
     
     # Main content area - tabs
-    tab_overview, tab_generation, tab_revenue, tab_debt, tab_waterfall, tab_tax, tab_regulatory, tab_validation = st.tabs([
+    tab_overview, tab_generation, tab_revenue, tab_debt, tab_pl, tab_bs, tab_cf, tab_waterfall, tab_tax, tab_regulatory, tab_validation = st.tabs([
         "📊 Overview",
         "⚡ Generation",
         "💰 Revenue",
         "🏦 Debt",
+        "📋 P&L",
+        "📊 Balance Sheet",
+        "💵 Cash Flow",
         "📈 Waterfall",
         "🏛️ Tax",
         "📜 Regulatory",
@@ -1075,7 +1078,7 @@ def main():
         st.subheader("Generation")
         
         # Generation chart
-        st.plotly_chart(create_generation_chart(tech_config, horizon), use_container_width=True)
+        st.plotly_chart(create_generation_chart(tech_config, horizon), width="stretch")
         
         # Show by year table
         data = []
@@ -1088,7 +1091,7 @@ def main():
                 "P99-1y (MWh)": round(tech_config.annual_generation_mwh(y, "P99-1y")),
             })
         
-        st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(data), width="stretch", hide_index=True)
     
     with tab_revenue:
         st.subheader("Revenue")
@@ -1114,7 +1117,7 @@ def main():
             st.metric("Y5 Revenue (P50)", f"{rev_y5:,.0f} kEUR")
         
         # Revenue chart
-        st.plotly_chart(create_revenue_chart(revenue_config, gen_y1, tech_type.split("_")[0]), use_container_width=True)
+        st.plotly_chart(create_revenue_chart(revenue_config, gen_y1, tech_type.split("_")[0]), width="stretch")
     
     with tab_debt:
         st.subheader("Debt Structure")
@@ -1143,6 +1146,197 @@ def main():
         if debt_config.mezzanine and debt_config.mezzanine.mezzanine_enabled:
             st.markdown("---")
             st.write(f"**Mezzanine:** {debt_config.mezzanine.mezzanine_keur:,.0f} kEUR @ {debt_config.mezzanine.mezz_rate*100:.1f}%")
+    
+    with tab_pl:
+        st.subheader("Profit & Loss Statement")
+        
+        # Run waterfall to get P&L data
+        try:
+            inputs = ProjectInputs.create_default_oborovo()
+            freq = PF.SEMESTRIAL if inputs.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
+            engine = PeriodEngine(
+                financial_close=inputs.info.financial_close,
+                construction_months=inputs.info.construction_months,
+                horizon_years=inputs.info.horizon_years,
+                ppa_years=inputs.revenue.ppa_term_years,
+                frequency=freq,
+            )
+            rate = debt_config.senior.all_in_rate / 2
+            tenor_periods = debt_config.senior.tenor_years * 2
+            
+            with st.spinner("Calculating P&L..."):
+                result = cached_run_waterfall(
+                    inputs=inputs, engine=engine,
+                    rate_per_period=rate, tenor_periods=tenor_periods,
+                    target_dscr=debt_config.senior.target_dscr,
+                    lockup_dscr=debt_config.senior.min_dscr_lockup,
+                    tax_rate=tax_config.corporate_tax_rate,
+                    dsra_months=debt_config.senior.dsra_months,
+                    shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
+                    shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
+                    discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                )
+            
+            # Build P&L DataFrame
+            pl_data = []
+            for p in result.periods:
+                if p.year_index > 0 and p.year_index <= horizon:
+                    ebitda = p.ebitda_keur
+                    depreciation = p.depreciation_keur if p.depreciation_keur > 0 else (inputs.capex.total_capex / horizon / 2)
+                    interest = p.interest_senior_keur + p.interest_shl_keur
+                    ebt = ebitda - depreciation - interest
+                    tax = p.tax_keur if p.tax_keur > 0 else 0
+                    net_income = ebt - tax
+                    pl_data.append({
+                        "Year": p.year_index,
+                        "Revenue (kEUR)": f"{p.revenue_keur:,.0f}",
+                        "OPEX (kEUR)": f"{-p.opex_keur:,.0f}",
+                        "EBITDA (kEUR)": f"{ebitda:,.0f}",
+                        "Depreciation (kEUR)": f"{-depreciation:,.0f}",
+                        "Interest (kEUR)": f"{-interest:,.0f}",
+                        "EBT (kEUR)": f"{ebt:,.0f}",
+                        "Tax (kEUR)": f"{-tax:,.0f}",
+                        "Net Income (kEUR)": f"{net_income:,.0f}",
+                    })
+            
+            if pl_data:
+                df_pl = pd.DataFrame(pl_data)
+                st.dataframe(df_pl.set_index("Year"), width="stretch")
+            else:
+                st.info("No operating periods available yet.")
+        except Exception as e:
+            st.error(f"P&L calculation failed: {str(e)}")
+    
+    with tab_bs:
+        st.subheader("Balance Sheet")
+        
+        try:
+            inputs = ProjectInputs.create_default_oborovo()
+            freq = PF.SEMESTRIAL if inputs.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
+            engine = PeriodEngine(
+                financial_close=inputs.info.financial_close,
+                construction_months=inputs.info.construction_months,
+                horizon_years=inputs.info.horizon_years,
+                ppa_years=inputs.revenue.ppa_term_years,
+                frequency=freq,
+            )
+            rate = debt_config.senior.all_in_rate / 2
+            tenor_periods = debt_config.senior.tenor_years * 2
+            
+            with st.spinner("Calculating Balance Sheet..."):
+                result = cached_run_waterfall(
+                    inputs=inputs, engine=engine,
+                    rate_per_period=rate, tenor_periods=tenor_periods,
+                    target_dscr=debt_config.senior.target_dscr,
+                    lockup_dscr=debt_config.senior.min_dscr_lockup,
+                    tax_rate=tax_config.corporate_tax_rate,
+                    dsra_months=debt_config.senior.dsra_months,
+                    shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
+                    shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
+                    discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                )
+            
+            # Build Balance Sheet
+            total_capex = inputs.capex.total_capex
+            initial_equity = total_capex * (1 - debt_config.senior.gearing_ratio)
+            senior_debt_initial = debt_config.senior.senior_debt_keur if debt_config.senior.senior_debt_keur > 0 else debt_config.senior.compute_debt_from_gearing(total_capex)
+            
+            # Aggregate by year
+            bs_data = []
+            cum_debt_repaid = 0
+            cum_net_income = 0
+            cash_balance = 0
+            
+            for p in result.periods:
+                if p.year_index > 0 and p.year_index <= horizon:
+                    cum_debt_repaid += p.senior_principal_keur
+                    cum_net_income += max(0, p.cf_after_tax_keur - p.senior_ds_keur - p.shl_service_keur)
+                    cash_balance += p.distribution_keur
+                    
+                    # Calculate period values
+                    remaining_debt = max(0, senior_debt_initial - cum_debt_repaid)
+                    fixed_assets = total_capex - (total_capex / horizon * p.year_index)
+                    total_assets = fixed_assets + max(0, cash_balance)
+                    equity = initial_equity + cum_net_income - cum_debt_repaid
+                    
+                    bs_data.append({
+                        "Year": p.year_index,
+                        "Fixed Assets (kEUR)": f"{fixed_assets:,.0f}",
+                        "Cash (kEUR)": f"{max(0, cash_balance):,.0f}",
+                        "Total Assets (kEUR)": f"{total_assets:,.0f}",
+                        "Senior Debt (kEUR)": f"{remaining_debt:,.0f}",
+                        "Total Liabilities (kEUR)": f"{remaining_debt:,.0f}",
+                        "Equity (kEUR)": f"{equity:,.0f}",
+                        "Equity + Liabilities (kEUR)": f"{total_assets:,.0f}",
+                    })
+            
+            if bs_data:
+                df_bs = pd.DataFrame(bs_data)
+                st.dataframe(df_bs.set_index("Year"), width="stretch")
+            else:
+                st.info("No operating periods available yet.")
+        except Exception as e:
+            st.error(f"Balance Sheet calculation failed: {str(e)}")
+    
+    with tab_cf:
+        st.subheader("Cash Flow Statement")
+        
+        try:
+            inputs = ProjectInputs.create_default_oborovo()
+            freq = PF.SEMESTRIAL if inputs.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
+            engine = PeriodEngine(
+                financial_close=inputs.info.financial_close,
+                construction_months=inputs.info.construction_months,
+                horizon_years=inputs.info.horizon_years,
+                ppa_years=inputs.revenue.ppa_term_years,
+                frequency=freq,
+            )
+            rate = debt_config.senior.all_in_rate / 2
+            tenor_periods = debt_config.senior.tenor_years * 2
+            
+            with st.spinner("Calculating Cash Flow..."):
+                result = cached_run_waterfall(
+                    inputs=inputs, engine=engine,
+                    rate_per_period=rate, tenor_periods=tenor_periods,
+                    target_dscr=debt_config.senior.target_dscr,
+                    lockup_dscr=debt_config.senior.min_dscr_lockup,
+                    tax_rate=tax_config.corporate_tax_rate,
+                    dsra_months=debt_config.senior.dsra_months,
+                    shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
+                    shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
+                    discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                )
+            
+            # Build Cash Flow Statement
+            cf_data = []
+            for p in result.periods:
+                if p.year_index > 0 and p.year_index <= horizon:
+                    # CFADS = EBITDA - Tax (actual cash taxes paid)
+                    cfads = p.ebitda_keur - abs(p.tax_keur) if p.tax_keur < 0 else p.ebitda_keur
+                    # Operating CF = CFADS - interest - principal
+                    operating_cf = cfads - p.interest_senior_keur - p.senior_principal_keur
+                    # Equity CF = Operating CF - debt service reserve movements
+                    equity_cf = p.distribution_keur
+                    
+                    cf_data.append({
+                        "Year": p.year_index,
+                        "EBITDA (kEUR)": f"{p.ebitda_keur:,.0f}",
+                        "Tax (kEUR)": f"{p.tax_keur:,.0f}",
+                        "CFADS (kEUR)": f"{cfads:,.0f}",
+                        "Senior Interest (kEUR)": f"{-p.interest_senior_keur:,.0f}",
+                        "Senior Principal (kEUR)": f"{-p.senior_principal_keur:,.0f}",
+                        "Operating CF (kEUR)": f"{operating_cf:,.0f}",
+                        "Distribution (kEUR)": f"{p.distribution_keur:,.0f}",
+                        "Equity CF (kEUR)": f"{equity_cf:,.0f}",
+                    })
+            
+            if cf_data:
+                df_cf = pd.DataFrame(cf_data)
+                st.dataframe(df_cf.set_index("Year"), width="stretch")
+            else:
+                st.info("No operating periods available yet.")
+        except Exception as e:
+            st.error(f"Cash Flow calculation failed: {str(e)}")
     
     with tab_waterfall:
         st.subheader("Cash Flow Waterfall")
@@ -1199,12 +1393,12 @@ def main():
             # Waterfall chart
             st.markdown("### Cash Flow Waterfall")
             wf_chart = create_waterfall_summary_chart(result)
-            st.plotly_chart(wf_chart, use_container_width=True)
+            st.plotly_chart(wf_chart, width="stretch")
             
             # DSCR chart
             st.markdown("### DSCR Over Time")
             dscr_chart = create_dscr_chart(result)
-            st.plotly_chart(dscr_chart, use_container_width=True)
+            st.plotly_chart(dscr_chart, width="stretch")
             
         except Exception as e:
             st.error(f"Waterfall calculation failed: {str(e)}")

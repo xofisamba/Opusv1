@@ -42,7 +42,7 @@ def render_scenario_manager(
             key="new_scenario_name"
         )
         
-        if st.button("💾 Save Scenario", use_container_width=True):
+        if st.button("💾 Save Scenario", width="stretch"):
             # Serialize current inputs
             scenario_data = _serialize_inputs(current_inputs)
             st.session_state.saved_scenarios[scenario_name] = scenario_data
@@ -109,7 +109,7 @@ def render_scenario_manager(
             })
         
         df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
         
     elif saved:
         # Show inputs comparison without calculated results
@@ -132,7 +132,7 @@ def render_scenario_manager(
             })
         
         df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
     
     # Export/Import
     st.divider()

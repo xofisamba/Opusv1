@@ -95,7 +95,7 @@ def render_charts(inputs, engine) -> None:
         # Revenue breakdown (if multiple revenue streams)
         st.write("**Revenue Table (k€)**")
         display_cols = ["Year", "Generation (MWh)", "Revenue (k€)", "EBITDA (k€)"]
-        st.dataframe(df_annual[display_cols].set_index("Year"), use_container_width=True)
+        st.dataframe(df_annual[display_cols].set_index("Year"), width="stretch")
     
     with tab2:
         st.subheader("Operating Expenditure")
@@ -116,7 +116,7 @@ def render_charts(inputs, engine) -> None:
         st.divider()
         
         st.write("**OPEX Table (k€)**")
-        st.dataframe(df_annual[["Year", "OPEX (k€)", "OPEX/MW"]].set_index("Year"), use_container_width=True)
+        st.dataframe(df_annual[["Year", "OPEX (k€)", "OPEX/MW"]].set_index("Year"), width="stretch")
     
     with tab3:
         st.subheader("Debt Service Coverage Ratio")
@@ -142,7 +142,7 @@ def render_charts(inputs, engine) -> None:
         st.divider()
         
         st.write("**DSCR Table**")
-        st.dataframe(df_annual[df_annual["DSCR"].notna()][["Year", "EBITDA (k€)", "Debt Service (k€)", "DSCR"]].set_index("Year"), use_container_width=True)
+        st.dataframe(df_annual[df_annual["DSCR"].notna()][["Year", "EBITDA (k€)", "Debt Service (k€)", "DSCR"]].set_index("Year"), width="stretch")
     
     with tab4:
         st.subheader("Cash Flow Waterfall")
@@ -179,7 +179,7 @@ def render_charts(inputs, engine) -> None:
         st.divider()
         
         st.write("**Waterfall Table**")
-        st.dataframe(wf_df.set_index("Year"), use_container_width=True)
+        st.dataframe(wf_df.set_index("Year"), width="stretch")
     
     st.divider()
     
@@ -220,4 +220,4 @@ def render_charts(inputs, engine) -> None:
             })
         
         semi_df = pd.DataFrame(semi_data)
-        st.dataframe(semi_df.set_index("Period"), use_container_width=True)
+        st.dataframe(semi_df.set_index("Period"), width="stretch")

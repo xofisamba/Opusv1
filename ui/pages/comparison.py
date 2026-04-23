@@ -185,17 +185,17 @@ def render_comparison(inputs, engine) -> None:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("📂 Load Oborovo", use_container_width=True):
+        if st.button("📂 Load Oborovo", width="stretch"):
             st.info("Oborovo Solar is your current project. Go to 📁 Projects tab to load it.")
     
     with col2:
-        if st.button("📂 Load Trebinje Solar", use_container_width=True):
+        if st.button("📂 Load Trebinje Solar", width="stretch"):
             trebinje = create_trebinje_solar()
             st.session_state.inputs = trebinje
             st.success("✅ Loaded Trebinje Solar! Go to Dashboard and click '🔄 Update Model'.")
     
     with col3:
-        if st.button("📂 Load Krnovo Wind", use_container_width=True):
+        if st.button("📂 Load Krnovo Wind", width="stretch"):
             krnovo = create_krnovo_wind()
             st.session_state.inputs = krnovo
             st.success("✅ Loaded Krnovo Wind! Go to Dashboard and click '🔄 Update Model'.")

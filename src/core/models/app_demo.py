@@ -357,7 +357,7 @@ def main():
                 # Display with formatting
                 st.dataframe(
                     df,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True
                 )
                 
@@ -378,12 +378,12 @@ def main():
             col1, col2 = st.columns(2)
             
             with col1:
-                st.plotly_chart(create_dscr_chart(result), use_container_width=True)
+                st.plotly_chart(create_dscr_chart(result), width="stretch")
             
             with col2:
-                st.plotly_chart(create_waterfall_chart(result), use_container_width=True)
+                st.plotly_chart(create_waterfall_chart(result), width="stretch")
             
-            st.plotly_chart(create_cashflow_chart(result), use_container_width=True)
+            st.plotly_chart(create_cashflow_chart(result), width="stretch")
         
         st.success("✅ Model izračunat!")
         

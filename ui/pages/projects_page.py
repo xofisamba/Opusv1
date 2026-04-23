@@ -30,7 +30,7 @@ def render_projects(inputs, engine) -> None:
             help="Brief description",
         )
         
-        if st.button("💾 Save Project", type="primary", use_container_width=True):
+        if st.button("💾 Save Project", type="primary", width="stretch"):
             if project_name:
                 try:
                     filepath = save_project(inputs, project_name, project_desc)
@@ -49,13 +49,13 @@ def render_projects(inputs, engine) -> None:
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("📁 Save Trebinje Solar", use_container_width=True):
+            if st.button("📁 Save Trebinje Solar", width="stretch"):
                 trebinje = create_trebinje_solar()
                 filepath = save_project(trebinje, "Trebinje Solar", "53.63 MWp solar, Bosnia")
                 st.success(f"✅ Saved Trebinje Solar")
         
         with col2:
-            if st.button("📁 Save Krnovo Wind", use_container_width=True):
+            if st.button("📁 Save Krnovo Wind", width="stretch"):
                 krnovo = create_krnovo_wind()
                 filepath = save_project(krnovo, "Krnovo Wind", "60 MW wind, Bosnia")
                 st.success(f"✅ Saved Krnovo Wind")
@@ -111,14 +111,14 @@ def render_projects(inputs, engine) -> None:
             st.markdown("**Oborovo Solar**")
             st.caption("53.63 MWp | Croatia")
             st.caption("P50: 1,494 hrs | 65 €/MWh")
-            if st.button("📂 Load Oborovo", use_container_width=True):
+            if st.button("📂 Load Oborovo", width="stretch"):
                 st.info("Oborovo is your current project")
         
         with col2:
             st.markdown("**Trebinje Solar**")
             st.caption("53.63 MWp | Bosnia")
             st.caption("P50: 1,536 hrs | 65 €/MWh")
-            if st.button("📂 Load Trebinje", use_container_width=True):
+            if st.button("📂 Load Trebinje", width="stretch"):
                 trebinje = create_trebinje_solar()
                 _apply_inputs(trebinje)
                 st.success("✅ Loaded Trebinje Solar")
@@ -127,7 +127,7 @@ def render_projects(inputs, engine) -> None:
             st.markdown("**Krnovo Wind**")
             st.caption("60 MW | Bosnia")
             st.caption("P50: 2,500 hrs | 55 €/MWh")
-            if st.button("📂 Load Krnovo", use_container_width=True):
+            if st.button("📂 Load Krnovo", width="stretch"):
                 krnovo = create_krnovo_wind()
                 _apply_inputs(krnovo)
                 st.success("✅ Loaded Krnovo Wind")

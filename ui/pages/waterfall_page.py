@@ -129,7 +129,7 @@ def render_waterfall(inputs, engine) -> None:
     df_waterfall = pd.DataFrame(waterfall_data)
     
     # Display (values already formatted as strings)
-    st.dataframe(df_waterfall, use_container_width=True, height=600)
+    st.dataframe(df_waterfall, width="stretch", height=600)
     
     st.divider()
     

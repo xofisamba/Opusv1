@@ -47,7 +47,7 @@ def render_excel_parity(inputs, engine) -> None:
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📂 Parse Excel File", type="primary", use_container_width=True):
+        if st.button("📂 Parse Excel File", type="primary", width="stretch"):
             if os.path.exists(excel_path):
                 with st.spinner("Parsing Excel file..."):
                     excel_inputs = parse_oborovo_excel(excel_path)
@@ -69,7 +69,7 @@ def render_excel_parity(inputs, engine) -> None:
                 st.warning(f"⚠️ File not found: {excel_path}")
     
     with col2:
-        if st.button("📊 Generate Baseline", use_container_width=True):
+        if st.button("📊 Generate Baseline", width="stretch"):
             if hasattr(st.session_state, 'excel_inputs'):
                 from io_.excel_integration import generate_baseline_json
                 
@@ -89,7 +89,7 @@ def render_excel_parity(inputs, engine) -> None:
     st.subheader("📊 Compare Model vs Excel")
     
     if hasattr(st.session_state, 'excel_inputs'):
-        if st.button("🔍 Run Comparison", type="primary", use_container_width=True):
+        if st.button("🔍 Run Comparison", type="primary", width="stretch"):
             with st.spinner("Comparing..."):
                 report = compare_to_excel(
                     inputs,
@@ -150,7 +150,7 @@ def render_excel_parity(inputs, engine) -> None:
     baseline_path = "/root/.openclaw/workspace/oborovo_model/tests/fixtures/oborovo_baseline.json"
     
     if os.path.exists(baseline_path):
-        if st.button("📊 Compare to Baseline", type="primary", use_container_width=True):
+        if st.button("📊 Compare to Baseline", type="primary", width="stretch"):
             import json
             
             with open(baseline_path, "r") as f:

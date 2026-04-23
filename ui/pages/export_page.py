@@ -43,7 +43,7 @@ def render_export(inputs, engine) -> None:
             help="Output filename"
         )
         
-        if st.button("📥 Export to Excel", type="primary", use_container_width=True):
+        if st.button("📥 Export to Excel", type="primary", width="stretch"):
             with st.spinner("Generating Excel file..."):
                 if export_type == "Full Model (with Waterfall)" and waterfall_result:
                     result = export_to_excel_advanced(
@@ -89,7 +89,7 @@ def render_export(inputs, engine) -> None:
             help="Output CSV filename"
         )
         
-        if st.button("📥 Export to CSV", use_container_width=True):
+        if st.button("📥 Export to CSV", width="stretch"):
             with st.spinner("Generating CSV file..."):
                 result = export_cashflows_to_csv(
                     inputs, engine,
