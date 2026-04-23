@@ -25,6 +25,12 @@ from domain.models import (
 )
 from domain.waterfall.waterfall_engine import cached_run_waterfall
 from domain.period_engine import PeriodEngine
+from src.ui.charts import (
+    create_waterfall_summary_chart, 
+    create_dscr_chart,
+    waterfall_metrics_html,
+)
+from domain.inputs import ProjectInputs
 
 
 # =============================================================================
@@ -1016,11 +1022,12 @@ def main():
         regulatory_config = render_regulatory_config()
     
     # Main content area - tabs
-    tab_overview, tab_generation, tab_revenue, tab_debt, tab_tax, tab_regulatory, tab_validation = st.tabs([
+    tab_overview, tab_generation, tab_revenue, tab_debt, tab_waterfall, tab_tax, tab_regulatory, tab_validation = st.tabs([
         "📊 Overview",
         "⚡ Generation",
         "💰 Revenue",
         "🏦 Debt",
+        "📈 Waterfall",
         "🏛️ Tax",
         "📜 Regulatory",
         "✅ Validation"
@@ -1135,6 +1142,64 @@ def main():
         if debt_config.mezzanine and debt_config.mezzanine.mezzanine_enabled:
             st.markdown("---")
             st.write(f"**Mezzanine:** {debt_config.mezzanine.mezzanine_keur:,.0f} kEUR @ {debt_config.mezzanine.mezz_rate*100:.1f}%")
+    
+    with tab_waterfall:
+        st.subheader("Cash Flow Waterfall")
+        
+        # Run waterfall calculation
+        try:
+            # Build ProjectInputs from current config
+            inputs = ProjectInputs.create_default_oborovo()
+            engine = PeriodEngine.from_tech_config(tech_config, horizon)
+            
+            rate = debt_config.senior.all_in_rate / 2
+            tenor_periods = debt_config.senior.tenor_years * 2
+            
+            with st.spinner("Calculating waterfall..."):
+                result = cached_run_waterfall(
+                    inputs=inputs,
+                    engine=engine,
+                    rate_per_period=rate,
+                    tenor_periods=tenor_periods,
+                    target_dscr=debt_config.senior.target_dscr,
+                    lockup_dscr=debt_config.senior.min_dscr_lockup,
+                    tax_rate=tax_config.corporate_tax_rate,
+                    dsra_months=debt_config.senior.dsra_months,
+                    shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
+                    shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
+                    discount_rate_project=0.0641,
+                    discount_rate_equity=0.0965,
+                )
+            
+            # Display metrics
+            st.markdown("### Key Metrics")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Project IRR", f"{result.project_irr*100:.2f}%")
+                st.metric("Equity IRR", f"{result.equity_irr*100:.2f}%")
+            with col2:
+                st.metric("Avg DSCR", f"{result.avg_dscr:.2f}x")
+                st.metric("Min DSCR", f"{result.min_dscr:.2f}x")
+            with col3:
+                st.metric("Total Distribution", f"{result.total_distribution_keur:,.0f} kEUR")
+                st.metric("Lockup Periods", result.periods_in_lockup)
+            with col4:
+                st.metric("Total Senior DS", f"{result.total_senior_ds_keur:,.0f} kEUR")
+                st.metric("Total Tax", f"{result.total_tax_keur:,.0f} kEUR")
+            
+            # Waterfall chart
+            st.markdown("### Cash Flow Waterfall")
+            wf_chart = create_waterfall_summary_chart(result)
+            st.plotly_chart(wf_chart, use_container_width=True)
+            
+            # DSCR chart
+            st.markdown("### DSCR Over Time")
+            dscr_chart = create_dscr_chart(result)
+            st.plotly_chart(dscr_chart, use_container_width=True)
+            
+        except Exception as e:
+            st.error(f"Waterfall calculation failed: {str(e)}")
+            st.info("Configure technology, revenue, and debt in the sidebar to run waterfall.")
     
     with tab_tax:
         st.subheader("Tax Parameters")
