@@ -19,6 +19,9 @@ from domain.models import (
     CapacityMarketParams, BESSRevenueParams,
     DebtConfig, SeniorDebtParams, MezzanineParams, SHLParams, EBLParams,
     TaxParams, RegulatoryParams,
+    CapexBreakdown, OpexParams,
+    SolarCapexBreakdown, WindCapexBreakdown, BESSCapexBreakdown,
+    SolarOpexParams, WindOpexParams, BESSOpexParams,
 )
 from domain.waterfall.waterfall_engine import cached_run_waterfall
 from domain.period_engine import PeriodEngine
@@ -1199,17 +1202,62 @@ def main():
         # Warnings based on benchmarks
         st.markdown("### Benchmark Warnings")
         
-        if tech_config.solar:
-            # Check capex benchmarks for solar (EUR/MWp)
-            capex_per_mwp = 750000  # Approximate - would need actual capex input
-            if capex_per_mwp < 650000 or capex_per_mwp > 870000:
-                st.warning(f"⚠️ Solar CAPEX deviates from benchmark (700-850k EUR/MWp)")
+        # Create CAPEX and OPEX for benchmark validation
+        tech_type_lower = tech_type.split("_")[0] if "_" in tech_type else tech_type
         
-        if tech_config.wind:
-            st.info("ℹ️ Wind projects: benchmark 1.0-1.4M EUR/MW")
+        if tech_type_lower == "solar" and tech_config.solar:
+            capex = CapexBreakdown.create_solar_defaults(tech_config.solar.capacity_ac_mw)
+            warnings = capex.validate_benchmark(jurisdiction)
+            if warnings:
+                for w in warnings:
+                    st.warning(f"⚠️ {w}")
+            else:
+                st.success("✅ Solar CAPEX within benchmark")
+            
+            opex = OpexParams.create_solar_defaults(tech_config.solar.capacity_ac_mw)
+            opex_errors = opex.validate_configuration()
+            if opex_errors:
+                for err in opex_errors:
+                    st.error(f"❌ OPEX: {err}")
         
-        if tech_config.bess:
-            st.info("ℹ️ BESS projects: benchmark 180-260k EUR/MWh")
+        elif tech_type_lower == "wind" and tech_config.wind:
+            capex = CapexBreakdown.create_wind_defaults(tech_config.wind.capacity_mw)
+            warnings = capex.validate_benchmark(jurisdiction)
+            if warnings:
+                for w in warnings:
+                    st.warning(f"⚠️ {w}")
+            else:
+                st.success("✅ Wind CAPEX within benchmark")
+        
+        elif tech_type_lower == "bess" and tech_config.bess:
+            capex = CapexBreakdown.create_bess_defaults(
+                tech_config.bess.power_capacity_mw, 
+                tech_config.bess.energy_capacity_mwh / tech_config.bess.power_capacity_mw
+            )
+            warnings = capex.validate_benchmark(jurisdiction)
+            if warnings:
+                for w in warnings:
+                    st.warning(f"⚠️ {w}")
+            else:
+                st.success("✅ BESS CAPEX within benchmark")
+        
+        # Tax and Regulatory validation
+        st.markdown("### Tax & Regulatory")
+        if tax_config:
+            tax_errors = tax_config.validate_configuration()
+            if tax_errors:
+                for err in tax_errors:
+                    st.error(f"❌ Tax: {err}")
+            else:
+                st.success("✅ Tax: valjano")
+        
+        if regulatory_config:
+            reg_errors = regulatory_config.validate_configuration()
+            if reg_errors:
+                for err in reg_errors:
+                    st.error(f"❌ Regulatory: {err}")
+            else:
+                st.success("✅ Regulatory: valjano")
 
 
 if __name__ == "__main__":
