@@ -24,8 +24,8 @@ from domain.models import (
     SolarOpexParams, WindOpexParams, BESSOpexParams,
 )
 from domain.waterfall.waterfall_engine import cached_run_waterfall
-from domain.period_engine import PeriodEngine
-from app.builder import _build_engine_from_inputs
+from domain.period_engine import PeriodEngine, PeriodFrequency as PF
+from domain.inputs import ProjectInputs, PeriodFrequency
 from src.ui.charts import (
     create_waterfall_summary_chart, 
     create_dscr_chart,
@@ -1149,9 +1149,17 @@ def main():
         
         # Run waterfall calculation
         try:
-            # Build ProjectInputs from current config  
+            # Build ProjectInputs from current config
             inputs = ProjectInputs.create_default_oborovo()
-            engine = _build_engine_from_inputs(inputs)
+            # Build period engine inline (avoid app.builder import issue)
+            freq = PF.SEMESTRIAL if inputs.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
+            engine = PeriodEngine(
+                financial_close=inputs.info.financial_close,
+                construction_months=inputs.info.construction_months,
+                horizon_years=inputs.info.horizon_years,
+                ppa_years=inputs.revenue.ppa_term_years,
+                frequency=freq,
+            )
             
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
