@@ -1145,7 +1145,7 @@ def main():
             st.metric("ATAD Limit", f"{tax_config.atad_ebitda_limit*100:.0f}% EBITDA")
         with col3:
             st.metric("VAT Rate", f"{tax_config.vat_rate*100:.1f}%")
-            st.metric("WHT Dividends", f"{tax_config.wdt_dividends*100:.1f}%")
+            st.metric("WHT Dividends", f"{tax_config.wht_dividends*100:.1f}%")
         
         col4, col5 = st.columns(2)
         with col4:

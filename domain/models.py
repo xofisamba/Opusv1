@@ -1,4 +1,4 @@
-"""Domain models - technology, revenue, debt, tax, regulatory."""
+"""Domain models - technology, revenue, debt, tax, regulatory, capex, opex."""
 from domain.technology.config import (
     TechnologyType, SolarTechnicalParams, WindTechnicalParams,
     BESSTechnicalParams, HybridConfig, TechnologyConfig,
@@ -12,6 +12,14 @@ from domain.debt.debt_config import (
 )
 from domain.tax.tax_params import TaxParams, DTTRate, get_dtt_rate
 from domain.regulatory.regulatory_params import RegulatoryParams
+from domain.capex.capex_breakdown import (
+    SolarCapexBreakdown, WindCapexBreakdown, BESSCapexBreakdown,
+    CommonCapexBreakdown, FinancialCapexBreakdown, CapexBreakdown,
+)
+from domain.opex.opex_params import (
+    SolarOpexParams, WindOpexParams, BESSOpexParams,
+    CommonOpexParams, OpexParams,
+)
 
 __all__ = [
     # Technology
@@ -41,4 +49,17 @@ __all__ = [
     "get_dtt_rate",
     # Regulatory
     "RegulatoryParams",
+    # CAPEX
+    "SolarCapexBreakdown",
+    "WindCapexBreakdown",
+    "BESSCapexBreakdown",
+    "CommonCapexBreakdown",
+    "FinancialCapexBreakdown",
+    "CapexBreakdown",
+    # OPEX
+    "SolarOpexParams",
+    "WindOpexParams",
+    "BESSOpexParams",
+    "CommonOpexParams",
+    "OpexParams",
 ]
