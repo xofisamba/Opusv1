@@ -362,3 +362,183 @@ class DebtConfig:
                 shl_repayment_year=15,
             )
         )
+    
+    def debt_service_schedule(
+        self, 
+        ebitda_schedule: list[float],
+        total_capex_keur: float = 0.0
+    ) -> dict[str, list[float]]:
+        """Calculate debt service schedule for all instruments.
+        
+        Args:
+            ebitda_schedule: EBITDA per period (for DSCR-based sculpting)
+            total_capex_keur: Total CAPEX for computing senior debt if not set
+        
+        Returns:
+            Dict with keys: 'senior_interest', 'senior_principal', 'senior_ds',
+            'mezz_interest', 'mezz_principal', 'mezz_ds',
+            'shl_interest', 'shl_principal', 'shl_ds',
+            'total_ds'
+        """
+        # Compute debt amounts
+        senior_debt = self.senior.senior_debt_keur
+        if senior_debt <= 0 and total_capex_keur > 0:
+            senior_debt = self.senior.compute_debt_from_gearing(total_capex_keur)
+        
+        mezz_debt = self.mezzanine.mezzanine_keur if (self.mezzanine and self.mezzanine.mezzanine_enabled) else 0.0
+        shl_debt = self.shl.shl_keur if (self.shl and self.shl.shl_enabled) else 0.0
+        
+        num_periods = len(ebitda_schedule)
+        periods_per_year = 2  # Semi-annual
+        total_years = num_periods / periods_per_year
+        
+        # Initialize schedules
+        result = {
+            'senior_interest': [0.0] * num_periods,
+            'senior_principal': [0.0] * num_periods,
+            'senior_ds': [0.0] * num_periods,
+            'mezz_interest': [0.0] * num_periods,
+            'mezz_principal': [0.0] * num_periods,
+            'mezz_ds': [0.0] * num_periods,
+            'shl_interest': [0.0] * num_periods,
+            'shl_principal': [0.0] * num_periods,
+            'shl_ds': [0.0] * num_periods,
+            'total_ds': [0.0] * num_periods,
+        }
+        
+        if senior_debt <= 0:
+            return result
+        
+        rate = self.senior.all_in_rate / periods_per_year  # Per period rate
+        senior_tenor_periods = self.senior.tenor_years * periods_per_year
+        
+        # Use sculpted approach - DSCR-based allocation
+        # Target: maintain target_dscr while paying interest + principal
+        target_dscr = self.senior.target_dscr
+        
+        remaining_debt = senior_debt
+        balance = senior_debt
+        
+        for i, ebitda in enumerate(ebitda_schedule):
+            # Interest on remaining balance
+            interest = balance * rate
+            result['senior_interest'][i] = interest
+            
+            # Sculpt principal to maintain target DSCR
+            target_ds = ebitda / target_dscr if target_dscr > 0 else ebitda
+            principal = max(0, target_ds - interest)
+            
+            # Ensure we don't over-pay (balance shouldn't go negative)
+            if principal > balance + interest:
+                principal = max(0, balance)
+            
+            result['senior_principal'][i] = principal
+            result['senior_ds'][i] = interest + principal
+            
+            # Update balance
+            balance = max(0, balance - principal)
+            
+            # Mezzanine (PIK or cash)
+            if mezz_debt > 0 and self.mezzanine:
+                mezz_rate = self.mezzanine.mezz_rate / periods_per_year
+                if self.mezzanine.pik_interest:
+                    # PIK - interest capitalizes
+                    mezz_interest = mezz_debt * mezz_rate
+                    mezz_debt += mezz_interest  # Capitalize
+                    result['mezz_interest'][i] = mezz_interest
+                    # Principal only at bullet
+                    if i == num_periods - 1 or (i + 1) % (self.mezzanine.mezz_tenor_years * periods_per_year) == 0:
+                        result['mezz_principal'][i] = mezz_debt
+                        mezz_debt = 0
+                else:
+                    # Cash interest
+                    result['mezz_interest'][i] = mezz_debt * mezz_rate
+                result['mezz_ds'][i] = result['mezz_interest'][i] + result['mezz_principal'][i]
+            
+            # SHL (subordinated, typically bullet or later repayment)
+            if shl_debt > 0 and self.shl:
+                shl_rate = self.shl.shl_rate / periods_per_year
+                result['shl_interest'][i] = shl_debt * shl_rate
+                # SHL repayment typically at end or after senior paid
+                # Check if in repayment year range
+                years_in = i / periods_per_year
+                if years_in >= self.shl.shl_repayment_year - 1:
+                    # Start repaying SHL (bullet)
+                    if i == num_periods - 1 or (i == int(self.shl.shl_repayment_year * periods_per_year) - 1):
+                        result['shl_principal'][i] = shl_debt
+                        shl_debt = 0
+                result['shl_ds'][i] = result['shl_interest'][i] + result['shl_principal'][i]
+            
+            # Total debt service
+            result['total_ds'][i] = (result['senior_ds'][i] + 
+                                     result['mezz_ds'][i] + 
+                                     result['shl_ds'][i])
+        
+        return result
+    
+    def mezzanine_schedule(self, mezz_debt_keur: float, tenor_years: int, rate: float, pik: bool = True) -> list[float]:
+        """Calculate mezzanine payment schedule.
+        
+        Args:
+            mezz_debt_keur: Mezzanine debt amount
+            tenor_years: Tenor in years
+            rate: Interest rate (decimal)
+            pik: True if PIK (interest capitalizes)
+        
+        Returns:
+            List of annual payment amounts
+        """
+        if mezz_debt_keur <= 0:
+            return []
+        
+        periods = tenor_years * 2  # Semi-annual
+        schedule = [0.0] * periods
+        balance = mezz_debt_keur
+        period_rate = rate / 2
+        
+        for i in range(periods):
+            if pik:
+                # PIK: cash interest = 0, but interest capitalizes
+                interest = balance * period_rate
+                balance += interest  # Capitalize
+                schedule[i] = 0  # No cash payment
+            else:
+                # Cash interest
+                interest = balance * period_rate
+                principal = mezz_debt_keur / periods  # Amortizing
+                schedule[i] = interest + principal
+        
+        # Bullet at end
+        if pik:
+            schedule[-1] = balance
+        
+        return schedule
+    
+    def shl_schedule(self, shl_keur: float, repayment_year: int, rate: float, tenor_years: int = 30) -> list[float]:
+        """Calculate SHL payment schedule.
+        
+        Args:
+            shl_keur: SHL amount
+            repayment_year: Year when principal repaid
+            rate: Interest rate (decimal)
+            tenor_years: Total tenor
+        
+        Returns:
+            List of semi-annual payment amounts
+        """
+        if shl_keur <= 0:
+            return []
+        
+        total_periods = tenor_years * 2
+        schedule = [0.0] * total_periods
+        period_rate = rate / 2
+        
+        for i in range(total_periods):
+            # Interest every period
+            schedule[i] += shl_keur * period_rate
+            
+            # Principal at repayment year
+            if i == (repayment_year - 1) * 2:  # Period index (0-based)
+                schedule[i] += shl_keur
+        
+        return schedule
