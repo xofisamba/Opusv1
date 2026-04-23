@@ -1,0 +1,1216 @@
+"""Complete financial model app with generic technology support.
+
+Supports: Solar PV, Wind, BESS, Solar+BESS, Wind+BESS, Agrivoltaics
+Technology selection UI + relevant inputs per technology.
+
+Run with: streamlit run src/app.py
+"""
+import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import date
+from typing import Optional, Tuple
+import pandas as pd
+
+from domain.models import (
+    TechnologyConfig, SolarTechnicalParams, WindTechnicalParams,
+    BESSTechnicalParams, HybridConfig,
+    RevenueConfig, PPAParams, MerchantParams, FeedInTariffParams, CfDParams,
+    CapacityMarketParams, BESSRevenueParams,
+    DebtConfig, SeniorDebtParams, MezzanineParams, SHLParams, EBLParams,
+    TaxParams, RegulatoryParams,
+)
+from domain.waterfall.waterfall_engine import cached_run_waterfall
+from domain.period_engine import PeriodEngine
+
+
+# =============================================================================
+# TECHNOLOGY CONFIGURATION UI
+# =============================================================================
+def render_technology_selector() -> Tuple[str, TechnologyConfig]:
+    """Render technology selection and return (tech_type, config)."""
+    
+    st.subheader("⚙️ Technology Selection")
+    
+    tech_options = {
+        "Solar PV": "solar",
+        "Wind (onshore)": "wind", 
+        "BESS (Standalone)": "bess",
+        "Solar + BESS": "solar_bess",
+        "Wind + BESS": "wind_bess",
+        "Agrivoltaics": "agrivoltaic",
+    }
+    
+    selected_label = st.selectbox(
+        "Project Type",
+        options=list(tech_options.keys()),
+        index=0,
+        help="Select renewable energy type"
+    )
+    
+    tech_type = tech_options[selected_label]
+    
+    # Create default config based on selection
+    if tech_type == "solar":
+        config = render_solar_inputs()
+    elif tech_type == "wind":
+        config = render_wind_inputs()
+    elif tech_type == "bess":
+        config = render_bess_inputs()
+    elif tech_type == "solar_bess":
+        config = render_solar_bess_inputs()
+    elif tech_type == "wind_bess":
+        config = render_wind_bess_inputs()
+    elif tech_type == "agrivoltaic":
+        config = render_agrivoltaic_inputs()
+    else:
+        config = TechnologyConfig.create_solar_defaults()
+    
+    return tech_type, config
+
+
+def render_solar_inputs() -> TechnologyConfig:
+    """Render Solar PV specific inputs."""
+    
+    st.markdown("#### ☀️ Solar PV Parameters")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        capacity_ac = st.number_input(
+            "AC Capacity (MW)", 
+            min_value=0.1, max_value=2000.0, 
+            value=75.0, step=1.0,
+            help="Installed AC power"
+        )
+        dc_ac_ratio = st.slider(
+            "DC/AC Ratio", 
+            1.0, 1.5, 1.2, step=0.01,
+            help="DC to AC ratio"
+        )
+        capacity_dc = capacity_ac * dc_ac_ratio
+        
+        hours_p50 = st.number_input(
+            "P50 Hours (annual)", 
+            min_value=500, max_value=4000, 
+            value=1500, step=10,
+            help="Full load equivalent hours - P50"
+        )
+        hours_p90 = st.number_input(
+            "P90-10y Hours", 
+            min_value=500, max_value=4000, 
+            value=1400, step=10,
+            help="P90-10y scenario"
+        )
+    
+    with col2:
+        degradation = st.slider(
+            "Annual Degradation (%)", 
+            0.0, 2.0, 0.4, step=0.1,
+            help="Annual efficiency decline"
+        ) / 100
+        
+        tracker = st.selectbox(
+            "Tracker Type",
+            ["fixed_tilt", "single_axis", "dual_axis"],
+            index=0,
+            help="Mounting type"
+        )
+        
+        bifacial = st.slider(
+            "Bifacial Gain (%)",
+            0.0, 15.0, 0.0, step=0.5,
+            help="Additional yield from bifacial modules"
+        ) / 100
+        
+        performance_ratio = st.slider(
+            "Performance Ratio (%)",
+            70.0, 90.0, 82.0, step=0.5,
+            help="System efficiency ratio"
+        ) / 100
+    
+    # System Losses
+    with st.expander("⚡ Additional Losses", expanded=False):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            soiling = st.slider("Soiling (%)", 0.0, 10.0, 2.0, step=0.1) / 100
+            shading = st.slider("Shading (%)", 0.0, 5.0, 1.0, step=0.1) / 100
+            mismatch = st.slider("Mismatch (%)", 0.0, 5.0, 1.5, step=0.1) / 100
+        with col_b:
+            dc_wiring = st.slider("DC Wiring (%)", 0.0, 5.0, 2.0, step=0.1) / 100
+            ac_wiring = st.slider("AC Wiring (%)", 0.0, 3.0, 1.0, step=0.1) / 100
+            inverter_eff = st.slider("Inverter Eff (%)", 90.0, 99.0, 98.0, step=0.1) / 100
+    
+    solar = SolarTechnicalParams(
+        capacity_dc_mwp=capacity_dc,
+        capacity_ac_mw=capacity_ac,
+        operating_hours_p50=hours_p50,
+        operating_hours_p90_1y=hours_p90,
+        operating_hours_p90_10y=hours_p90,
+        operating_hours_p99_1y=int(hours_p90 * 0.85),
+        pv_degradation_annual=degradation,
+        bifaciality_factor=bifacial,
+        tracker_type=tracker,
+        tracker_yield_gain=0.0,
+        soiling_loss_pct=soiling,
+        shading_loss_pct=shading,
+        mismatch_loss_pct=mismatch,
+        dc_wiring_loss_pct=dc_wiring,
+        ac_wiring_loss_pct=ac_wiring,
+        transformer_loss_pct=0.005,
+        inverter_efficiency=inverter_eff,
+        performance_ratio_p50=performance_ratio,
+        grid_curtailment_pct=0.0,
+        self_consumption_pct=0.0,
+    )
+    
+    return TechnologyConfig(technology_type="solar", solar=solar)
+
+
+def render_wind_inputs() -> TechnologyConfig:
+    """Render Wind specific inputs."""
+    
+    st.markdown("#### 🌬️ Wind Parameters")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        capacity = st.number_input(
+            "Installed Capacity (MW)", 
+            min_value=1.0, max_value=2000.0, 
+            value=50.0, step=1.0
+        )
+        num_turbines = st.number_input(
+            "Number of Turbines", 
+            min_value=1, max_value=200, 
+            value=12, step=1
+        )
+        turbine_rating = capacity / num_turbines if num_turbines > 0 else 4.0
+        
+        hub_height = st.number_input(
+            "Hub Height (m)", 
+            min_value=50, max_value=200, 
+            value=100, step=5
+        )
+        
+        hours_p50 = st.number_input(
+            "P50 Hours", 
+            min_value=1000, max_value=4000, 
+            value=2200, step=50
+        )
+    
+    with col2:
+        wake_loss = st.slider(
+            "Wake Losses (%)", 
+            0.0, 10.0, 5.0, step=0.1
+        ) / 100
+        
+        avail_mech = st.slider(
+            "Mechanical Availability (%)",
+            90.0, 100.0, 97.0, step=0.5
+        ) / 100
+        
+        avail_grid = st.slider(
+            "Grid Availability (%)",
+            95.0, 100.0, 99.0, step=0.5
+        ) / 100
+        
+        curtailment = st.slider(
+            "Total Curtailment (%)",
+            0.0, 20.0, 0.0, step=0.5
+        ) / 100
+    
+    wind = WindTechnicalParams(
+        capacity_mw=capacity,
+        num_turbines=num_turbines,
+        turbine_rating_mw=turbine_rating,
+        hub_height_m=hub_height,
+        rotor_diameter_m=130.0,
+        operating_hours_p50=hours_p50,
+        operating_hours_p90_1y=int(hours_p50 * 0.92),
+        operating_hours_p90_10y=int(hours_p50 * 0.92),
+        operating_hours_p99_1y=int(hours_p50 * 0.75),
+        wake_loss_pct=wake_loss,
+        availability_mechanical=avail_mech,
+        availability_grid=avail_grid,
+        hysteresis_loss_pct=0.01,
+        icing_loss_pct=0.0,
+        curtailment_noise_pct=0.0,
+        curtailment_bat_pct=0.0,
+        curtailment_grid_pct=0.0,
+        wind_degradation_annual=0.003,
+    )
+    
+    return TechnologyConfig(technology_type="wind", wind=wind)
+
+
+def render_bess_inputs() -> TechnologyConfig:
+    """Render BESS specific inputs."""
+    
+    st.markdown("#### 🔋 BESS Parameters")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        power_mw = st.number_input(
+            "Power (MW)", 
+            min_value=1.0, max_value=1000.0, 
+            value=20.0, step=1.0
+        )
+        duration = st.selectbox(
+            "Duration (hours)",
+            [1, 2, 4, 6, 8],
+            index=1,
+            help="How many hours can discharge"
+        )
+        energy_mwh = power_mw * duration
+        
+        chemistry = st.selectbox(
+            "Battery Technology",
+            ["LFP", "NMC", "NaS", "flow"],
+            index=0,
+            help="LFP is most common for storage"
+        )
+    
+    with col2:
+        rte = st.slider(
+            "Roundtrip Efficiency (%)",
+            80.0, 95.0, 88.0, step=0.5
+        ) / 100
+        
+        calendar_deg = st.slider(
+            "Calendar Degradation (%/year)",
+            0.0, 5.0, 1.5, step=0.1
+        ) / 100
+        
+        cycle_deg = st.number_input(
+            "Degradation per Cycle (%)",
+            0.0, 0.5, 0.01, step=0.001
+        ) / 100
+        
+        replacement_year = st.number_input(
+            "Replacement Year",
+            5, 20, 10, step=1
+        )
+    
+    bess = BESSTechnicalParams(
+        energy_capacity_mwh=energy_mwh,
+        power_capacity_mw=power_mw,
+        duration_hours=duration,
+        battery_chemistry=chemistry,
+        roundtrip_efficiency=rte,
+        auxiliary_consumption_pct=0.01,
+        calendar_degradation_annual=calendar_deg,
+        cycle_degradation_per_cycle=cycle_deg,
+        eol_capacity_threshold=0.80,
+        soc_min_pct=0.10,
+        soc_max_pct=0.95,
+        annual_cycles_target=365,
+        replacement_year=replacement_year,
+        replacement_cost_pct_of_capex=0.70,
+    )
+    
+    return TechnologyConfig(technology_type="bess", bess=bess)
+
+
+def render_solar_bess_inputs() -> TechnologyConfig:
+    """Render Solar + BESS hybrid inputs."""
+    
+    st.markdown("#### ☀️🔋 Solar + BESS Hybrid")
+    
+    solar_config = render_solar_inputs()
+    
+    st.markdown("---")
+    st.markdown("##### BESS Komponenta")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        bess_power = st.number_input(
+            "BESS Power (MW)", 
+            min_value=1.0, max_value=500.0, 
+            value=15.0, step=1.0
+        )
+        bess_duration = st.selectbox(
+            "BESS Duration (hours)",
+            [1, 2, 4, 6, 8],
+            index=1
+        )
+    
+    with col2:
+        bess_strategy = st.selectbox(
+            "BESS Strategy",
+            ["peak_shaving", "arbitrage", "firm_power", "mixed"],
+            index=0
+        )
+        grid_limit = st.number_input(
+            "Grid Limit (MW)",
+            min_value=0.0, max_value=1000.0,
+            value=solar_config.solar.capacity_ac_mw if solar_config.solar else 75.0,
+            step=1.0
+        )
+    
+    bess = BESSTechnicalParams(
+        energy_capacity_mwh=bess_power * bess_duration,
+        power_capacity_mw=bess_power,
+        duration_hours=bess_duration,
+        battery_chemistry="LFP",
+        roundtrip_efficiency=0.88,
+    )
+    
+    hybrid = HybridConfig(
+        technology_primary="solar",
+        bess_enabled=True,
+        shared_grid_connection=True,
+        grid_connection_mw=grid_limit,
+        bess_strategy=bess_strategy,
+    )
+    
+    return TechnologyConfig(
+        technology_type="solar_bess",
+        solar=solar_config.solar,
+        bess=bess,
+        hybrid=hybrid,
+    )
+
+
+def render_wind_bess_inputs() -> TechnologyConfig:
+    """Render Wind + BESS hybrid inputs."""
+    
+    st.markdown("#### 🌬️🔋 Wind + BESS Hybrid")
+    
+    wind_config = render_wind_inputs()
+    
+    st.markdown("---")
+    st.markdown("##### BESS Komponenta")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        bess_power = st.number_input("BESS Power (MW)", min_value=1.0, max_value=500.0, value=15.0, step=1.0)
+        bess_duration = st.selectbox("BESS Duration (hours)", [1, 2, 4, 6, 8], index=1)
+    
+    with col2:
+        bess_strategy = st.selectbox("BESS Strategy", ["peak_shaving", "arbitrage", "firm_power", "mixed"], index=0)
+        grid_limit = st.number_input("Grid Limit (MW)", min_value=0.0, max_value=1000.0, value=wind_config.wind.capacity_mw if wind_config.wind else 50.0, step=1.0)
+    
+    bess = BESSTechnicalParams(
+        energy_capacity_mwh=bess_power * bess_duration,
+        power_capacity_mw=bess_power,
+        duration_hours=bess_duration,
+        battery_chemistry="LFP",
+        roundtrip_efficiency=0.88,
+    )
+    
+    hybrid = HybridConfig(
+        technology_primary="wind",
+        bess_enabled=True,
+        shared_grid_connection=True,
+        grid_connection_mw=grid_limit,
+        bess_strategy=bess_strategy,
+    )
+    
+    return TechnologyConfig(
+        technology_type="wind_bess",
+        wind=wind_config.wind,
+        bess=bess,
+        hybrid=hybrid,
+    )
+
+
+def render_agrivoltaic_inputs() -> TechnologyConfig:
+    """Render Agrivoltaics inputs."""
+    
+    solar_config = render_solar_inputs()
+    
+    st.markdown("#### 🌾 Agrivoltaics Additional Parameters")
+    
+    agrivoltaic_reduction = st.slider(
+        "Yield Reduction (%)",
+        0.0, 30.0, 10.0, step=0.5,
+        help="Yield reduction due to panels above crops"
+    ) / 100
+    
+    land_premium = st.number_input(
+        "Land Rental Premium (EUR/ha/year)",
+        0, 2000, 500, step=50
+    )
+    
+    # Update solar params
+    solar = solar_config.solar
+    solar.agrivoltaic_enabled = True
+    solar.agrivoltaic_yield_reduction = agrivoltaic_reduction
+    solar.agrivoltaic_land_rental_premium = land_premium
+    
+    return TechnologyConfig(technology_type="agrivoltaic", solar=solar)
+
+
+# =============================================================================
+# REVENUE CONFIGURATION UI
+# =============================================================================
+def render_revenue_config() -> RevenueConfig:
+    """Render revenue configuration UI."""
+    
+    st.subheader("💰 Revenue Model")
+    
+    # Revenue type selection
+    revenue_type = st.selectbox(
+        "Revenue Model Type",
+        ["PPA", "Merchant", "PPA + Merchant mix", "FiT", "CfD"],
+        index=0,
+        help="Select revenue model"
+    )
+    
+    if revenue_type == "PPA":
+        return render_ppa_revenue()
+    elif revenue_type == "Merchant":
+        return render_merchant_revenue()
+    elif revenue_type == "PPA + Merchant mix":
+        return render_ppa_merchant_revenue()
+    elif revenue_type == "FiT":
+        return render_fit_revenue()
+    elif revenue_type == "CfD":
+        return render_cfd_revenue()
+    
+    return RevenueConfig.create_ppa_defaults()
+
+
+def render_ppa_revenue() -> RevenueConfig:
+    """PPA revenue inputs."""
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        tariff = st.number_input(
+            "PPA Price (EUR/MWh)",
+            min_value=0.0, max_value=500.0,
+            value=57.0, step=1.0
+        )
+        ppa_term = st.number_input(
+            "PPA Term (years)",
+            min_value=0, max_value=30,
+            value=12, step=1
+        )
+        ppa_index = st.slider(
+            "PPA Indexation (%)",
+            0.0, 10.0, 2.0, step=0.1
+        ) / 100
+    
+    with col2:
+        volume_share = st.slider(
+            "PPA Volume Share (%)",
+            0.0, 100.0, 100.0, step=5.0
+        ) / 100
+        balancing = st.slider(
+            "Balancing Cost (%)",
+            0.0, 10.0, 2.5, step=0.1
+        ) / 100
+    
+    ppa = PPAParams(
+        ppa_enabled=True,
+        ppa_type="pay_as_produced",
+        ppa_base_price_eur_mwh=tariff,
+        ppa_price_index=ppa_index,
+        ppa_term_years=ppa_term,
+        ppa_volume_share=volume_share,
+        balancing_cost_pct=balancing,
+    )
+    
+    return RevenueConfig(ppa=ppa)
+
+
+def render_merchant_revenue() -> RevenueConfig:
+    """Merchant revenue inputs."""
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        base_price = st.number_input(
+            "Spot Price (EUR/MWh)",
+            min_value=0.0, max_value=500.0,
+            value=65.0, step=1.0
+        )
+        escalation = st.slider(
+            "Annual Escalation (%)",
+            -5.0, 10.0, 2.0, step=0.1
+        ) / 100
+        cannibalization = st.slider(
+            "Price Cannibalization (%)",
+            0.0, 5.0, 0.0, step=0.1
+        ) / 100
+    
+    with col2:
+        capture_solar = st.slider(
+            "Solar Capture Rate (%)",
+            50.0, 100.0, 85.0, step=1.0
+        ) / 100
+        capture_wind = st.slider(
+            "Wind Capture Rate (%)",
+            50.0, 100.0, 90.0, step=1.0
+        ) / 100
+    
+    merchant = MerchantParams(
+        merchant_enabled=True,
+        base_price_eur_mwh=base_price,
+        price_escalation_annual=escalation,
+        price_cannibalization_pct=cannibalization,
+        capture_rate_solar=capture_solar,
+        capture_rate_wind=capture_wind,
+    )
+    
+    return RevenueConfig(merchant=merchant)
+
+
+def render_ppa_merchant_revenue() -> RevenueConfig:
+    """PPA + Merchant mix inputs."""
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        ppa_price = st.number_input("PPA Price (EUR/MWh)", value=57.0, step=1.0)
+        ppa_term = st.number_input("PPA Term (years)", value=12, step=1)
+        ppa_share = st.slider("PPA Share (%)", 0.0, 100.0, 70.0, step=5.0) / 100
+    
+    with col2:
+        merchant_price = st.number_input("Merchant Price (EUR/MWh)", value=65.0, step=1.0)
+    
+    ppa = PPAParams(
+        ppa_enabled=True,
+        ppa_base_price_eur_mwh=ppa_price,
+        ppa_term_years=ppa_term,
+        ppa_volume_share=ppa_share,
+        balancing_cost_pct=0.025,
+    )
+    
+    merchant = MerchantParams(
+        merchant_enabled=True,
+        base_price_eur_mwh=merchant_price,
+    )
+    
+    return RevenueConfig(ppa=ppa, merchant=merchant)
+
+
+def render_fit_revenue() -> RevenueConfig:
+    """Feed-in Tariff inputs."""
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        fit_price = st.number_input("FiT Price (EUR/MWh)", value=90.0, step=1.0)
+        fit_term = st.number_input("FiT Term (years)", value=15, step=1)
+        fit_type = st.selectbox("FiT Type", ["fixed_fit", "premium"], index=0)
+    
+    with col2:
+        scheme = st.selectbox("Scheme", ["HROTE (HR)", "FERK (BA)", "ELEM (MK)", "EPS (RS)"], index=0)
+    
+    fit = FeedInTariffParams(
+        fit_enabled=True,
+        fit_type=fit_type,
+        fit_price_eur_mwh=fit_price,
+        fit_term_years=fit_term,
+        fit_scheme=scheme.split()[0] if scheme else "",
+    )
+    
+    return RevenueConfig(fit=fit)
+
+
+def render_cfd_revenue() -> RevenueConfig:
+    """CfD inputs."""
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        strike = st.number_input("Strike Price (EUR/MWh)", value=75.0, step=1.0)
+        cfd_term = st.number_input("CfD Term (years)", value=10, step=1)
+        volume = st.number_input("Annual Volume (MWh)", value=0, step=10000, help="0 = total production")
+    
+    with col2:
+        two_way = st.checkbox("Two-way CfD", value=True, help="Payment and receipt")
+        counterparty = st.selectbox("Counterparty", ["government", "utility", "corporate"], index=0)
+    
+    cfd = CfDParams(
+        cfd_enabled=True,
+        strike_price_eur_mwh=strike,
+        cfd_term_years=cfd_term,
+        cfd_volume_mwh_annual=volume,
+        two_way_cfd=two_way,
+        cfd_counterparty=counterparty,
+    )
+    
+    return RevenueConfig(cfd=cfd)
+
+
+# =============================================================================
+# DEBT CONFIGURATION UI
+# =============================================================================
+def render_debt_config() -> DebtConfig:
+    """Render debt configuration UI."""
+    
+    st.subheader("🏦 Debt Structure")
+    
+    # Basic debt params
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        gearing = st.slider(
+            "Gearing (%)",
+            0.0, 95.0, 75.0, step=0.5
+        ) / 100
+        tenor = st.number_input(
+            "Senior Tenor (years)",
+            min_value=1, max_value=30,
+            value=14, step=1
+        )
+    
+    with col2:
+        base_rate = st.number_input(
+            "Base Rate (%)",
+            0.0, 15.0, 3.0, step=0.1
+        ) / 100
+        margin = st.number_input(
+            "Margin (bps)",
+            0, 1000, 265, step=5
+        )
+    
+    col3, col4 = st.columns(2)
+    with col3:
+        target_dscr = st.slider(
+            "Target DSCR (x)",
+            1.0, 2.0, 1.15, step=0.05
+        )
+        lockup_dscr = st.slider(
+            "Lockup DSCR (x)",
+            1.0, 1.5, 1.10, step=0.05
+        )
+    
+    with col4:
+        dsra_months = st.slider(
+            "DSRA Months",
+            0, 12, 6, step=1
+        )
+        amortization = st.selectbox(
+            "Amortization",
+            ["sculpted", "annuity", "straight_line", "bullet"],
+            index=0
+        )
+    
+    senior = SeniorDebtParams(
+        gearing_ratio=gearing,
+        tenor_years=tenor,
+        base_rate=base_rate,
+        margin_bps=margin,
+        target_dscr=target_dscr,
+        min_dscr_lockup=lockup_dscr,
+        dsra_months=dsra_months,
+        amortization_type=amortization,
+    )
+    
+    # SHL option
+    use_shl = st.checkbox("Include SHL (Shareholder Loan)", value=False)
+    
+    shl = None
+    if use_shl:
+        col_shl1, col_shl2 = st.columns(2)
+        with col_shl1:
+            shl_amount = st.number_input(
+                "SHL Amount (kEUR)",
+                min_value=0.0, max_value=100000.0,
+                value=5000.0, step=100.0
+            )
+            shl_rate = st.number_input(
+                "SHL Rate (%)",
+                0.0, 20.0, 8.0, step=0.5
+            ) / 100
+        
+        with col_shl2:
+            shl_repayment = st.number_input(
+                "SHL Repayment (year)",
+                min_value=0, max_value=30,
+                value=15, step=1
+            )
+        
+        shl = SHLParams(
+            shl_enabled=True,
+            shl_keur=shl_amount,
+            shl_rate=shl_rate,
+            shl_repayment_year=shl_repayment,
+        )
+    
+    # Mezz option
+    use_mezz = st.checkbox("Include Mezzanine", value=False)
+    
+    mezz = None
+    if use_mezz:
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            mezz_amount = st.number_input(
+                "Mezz Amount (kEUR)",
+                min_value=0.0, max_value=50000.0,
+                value=3000.0, step=100.0
+            )
+            mezz_rate = st.number_input(
+                "Mezz Rate (%)",
+                0.0, 20.0, 10.0, step=0.5
+            ) / 100
+        
+        with col_m2:
+            mezz_tenor = st.number_input(
+                "Mezz Tenor (years)",
+                min_value=1, max_value=20,
+                value=8, step=1
+            )
+            pik = st.checkbox("PIK Interest", value=True)
+        
+        mezz = MezzanineParams(
+            mezzanine_enabled=True,
+            mezzanine_keur=mezz_amount,
+            mezz_rate=mezz_rate,
+            mezz_tenor_years=mezz_tenor,
+            pik_interest=pik,
+        )
+    
+    return DebtConfig(senior=senior, mezzanine=mezz, shl=shl)
+
+
+# =============================================================================
+# RESULTS VISUALIZATION
+# =============================================================================
+def create_generation_chart(tech_config: TechnologyConfig, years: int = 30) -> go.Figure:
+    """Create generation chart for selected technology."""
+    
+    years_list = list(range(1, years + 1))
+    p50 = [tech_config.annual_generation_mwh(y, "P50") for y in years_list]
+    p90 = [tech_config.annual_generation_mwh(y, "P90-10y") for y in years_list]
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=years_list, y=p50, name="P50", line=dict(color="green")))
+    fig.add_trace(go.Scatter(x=years_list, y=p90, name="P90-10y", line=dict(color="blue", dash="dash")))
+    
+    fig.update_layout(
+        title="Annual Generation by Year",
+        xaxis_title="Year",
+        yaxis_title="MWh",
+        height=350,
+    )
+    
+    return fig
+
+
+def create_revenue_chart(revenue_config: RevenueConfig, generation_mwh: float, tech: str = "solar") -> go.Figure:
+    """Create revenue chart by scenario."""
+    
+    years_list = list(range(1, 31))
+    ppa_rev = [revenue_config.total_annual_revenue_keur(generation_mwh, y, tech) for y in years_list]
+    
+    # Assume degradation of generation
+    gen_p50 = [generation_mwh * (0.996 ** (y-1)) for y in years_list]  # ~0.4% deg
+    rev_p50 = [revenue_config.total_annual_revenue_keur(gen_p50[y-1], y+1, tech) for y in years_list]
+    
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=years_list, y=rev_p50, name="Revenue (kEUR)", marker_color="teal"))
+    
+    fig.update_layout(
+        title="Revenue Projection",
+        xaxis_title="Year",
+        yaxis_title="Revenue (kEUR)",
+        height=300,
+    )
+    
+    return fig
+
+
+# =============================================================================
+# MAIN APP
+# =============================================================================
+
+
+# =============================================================================
+# TAX AND REGULATORY UI
+# =============================================================================
+def render_tax_config() -> TaxParams:
+    """Render tax configuration UI."""
+    
+    st.subheader("🏛️ Tax Parameters")
+    
+    with st.expander("Tax Configuration", expanded=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            tax_rate = st.slider(
+                "Corporate Tax Rate (%)",
+                0.0, 50.0, 10.0, step=0.5
+            ) / 100
+            
+            loss_years = st.number_input(
+                "Loss Carryforward (years)",
+                min_value=0, max_value=30, value=5, step=1
+            )
+            
+            thin_cap = st.checkbox("Thin Cap Rule", value=True)
+            if thin_cap:
+                thin_cap_ratio = st.slider(
+                    "Thin Cap Ratio (D/E)",
+                    1.0, 6.0, 4.0, step=0.5
+                )
+            else:
+                thin_cap_ratio = 4.0
+        
+        with col2:
+            atad = st.checkbox("ATAD (EU)", value=True)
+            if atad:
+                atad_limit = st.slider(
+                    "ATAD EBITDA Limit (%)",
+                    20.0, 50.0, 30.0, step=1.0
+                ) / 100
+            else:
+                atad_limit = 0.30
+            
+            wht_div = st.slider(
+                "WHT Dividends (%)",
+                0.0, 30.0, 5.0, step=0.5
+            ) / 100
+            
+            vat_rate = st.slider(
+                "VAT Rate (%)",
+                0.0, 30.0, 25.0, step=0.5
+            ) / 100
+        
+        # Jurisdiction-specific defaults button
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("Use HR Defaults"):
+                return TaxParams.create_hr_defaults()
+        with col_btn2:
+            if st.button("Use RS Defaults"):
+                return TaxParams.create_rs_defaults()
+        
+        return TaxParams(
+            jurisdiction="HR",
+            corporate_tax_rate=tax_rate,
+            loss_carryforward_years=loss_years,
+            atad_applies=atad,
+            atad_ebitda_limit=atad_limit,
+            thin_cap_enabled=thin_cap,
+            thin_cap_ratio=thin_cap_ratio,
+            wht_dividends=wht_div,
+            vat_rate=vat_rate,
+        )
+
+
+def render_regulatory_config() -> RegulatoryParams:
+    """Render regulatory configuration UI."""
+    
+    st.subheader("📜 Regulatory Parameters")
+    
+    with st.expander("Regulatory Configuration", expanded=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            permits_months = st.number_input(
+                "Permitting Timeline (months)",
+                min_value=1, max_value=60, value=24, step=1
+            )
+            grid_type = st.selectbox(
+                "Grid Connection Type",
+                ["distribution", "direct_transmission", "submarine"],
+                index=0
+            )
+            congestion = st.selectbox(
+                "Grid Congestion Risk",
+                ["low", "medium", "high"],
+                index=1
+            )
+        
+        with col2:
+            curtailment = st.slider(
+                "Mandatory Curtailment (%)",
+                0.0, 20.0, 0.0, step=0.5
+            ) / 100
+            curtailment_comp = st.checkbox("Curtailment Compensation", value=True)
+            
+            rec_enabled = st.checkbox("GO/REC Enabled", value=True)
+            if rec_enabled:
+                rec_price = st.number_input(
+                    "REC Price (EUR/MWh)",
+                    min_value=0.0, max_value=10.0, value=0.5, step=0.1
+                )
+            else:
+                rec_price = 0.0
+        
+        # Jurisdiction defaults
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
+        with col_btn1:
+            if st.button("HR Regulatory"):
+                return RegulatoryParams.create_hr_defaults()
+        with col_btn2:
+            if st.button("SI Regulatory"):
+                return RegulatoryParams.create_si_defaults()
+        with col_btn3:
+            if st.button("RS Regulatory"):
+                return RegulatoryParams.create_rs_defaults()
+        
+        return RegulatoryParams(
+            jurisdiction="HR",
+            permitting_timeline_months=permits_months,
+            grid_connection_type=grid_type,
+            grid_congestion_risk=congestion,
+            mandatory_curtailment_pct=curtailment,
+            curtailment_compensation=curtailment_comp,
+            rec_enabled=rec_enabled,
+            rec_price_eur_mwh=rec_price,
+        )
+
+
+def main():
+    st.set_page_config(
+        page_title="Renewable Energy Financial Model",
+        page_icon="⚡",
+        layout="wide"
+    )
+    
+    st.title("⚡ Renewable Energy Financial Model")
+    st.caption("Generic Project Finance Model - Solar, Wind, BESS, Hybrid")
+    
+    # Sidebar for project setup
+    with st.sidebar:
+        st.header("📋 Project Setup")
+        
+        # Project info
+        st.subheader("📐 Basic Information")
+        project_name = st.text_input("Project Name", value="Novi Projekt")
+        jurisdiction = st.selectbox(
+            "Jurisdiction",
+            ["HR", "BA", "RS", "SI", "MK", "EU_generic"],
+            index=0
+        )
+        horizon = st.number_input(
+            "Investment Horizon (years)",
+            min_value=10, max_value=50,
+            value=30, step=1
+        )
+        
+        st.divider()
+        
+        # Technology selection
+        tech_type, tech_config = render_technology_selector()
+        
+        st.divider()
+        
+        # Revenue config
+        revenue_config = render_revenue_config()
+        
+        st.divider()
+        
+        # Debt config
+        debt_config = render_debt_config()
+        
+        st.divider()
+        
+        # Tax config
+        tax_config = render_tax_config()
+        
+        st.divider()
+        
+        # Regulatory config
+        regulatory_config = render_regulatory_config()
+    
+    # Main content area - tabs
+    tab_overview, tab_generation, tab_revenue, tab_debt, tab_tax, tab_regulatory, tab_validation = st.tabs([
+        "📊 Overview",
+        "⚡ Generation",
+        "💰 Revenue",
+        "🏦 Debt",
+        "🏛️ Tax",
+        "📜 Regulatory",
+        "✅ Validation"
+    ])
+    
+    with tab_overview:
+        st.subheader("Project: " + project_name)
+        
+        # Show key metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            if tech_config.solar:
+                st.metric("AC Kapacitet", f"{tech_config.solar.capacity_ac_mw:.1f} MW")
+            elif tech_config.wind:
+                st.metric("Instalirana snaga", f"{tech_config.wind.capacity_mw:.1f} MW")
+            elif tech_config.bess:
+                st.metric("BESS Snaga", f"{tech_config.bess.power_capacity_mw:.1f} MW")
+                st.metric("BESS Energy", f"{tech_config.bess.energy_capacity_mwh:.1f} MWh")
+        
+        with col2:
+            gen_y1 = tech_config.annual_generation_mwh(1, "P50")
+            st.metric("Y1 Generation (P50)", f"{gen_y1:,.0f} MWh")
+        
+        with col3:
+            rev_y1 = revenue_config.total_annual_revenue_keur(gen_y1, 1, tech_type.split("_")[0])
+            st.metric("Y1 Revenue (P50)", f"{rev_y1:,.0f} kEUR")
+        
+        with col4:
+            debt_keur = debt_config.total_debt_keur(100000)  # Placeholder capex
+            st.metric("Debt (kEUR)", f"{debt_keur:,.0f}")
+        
+        # Validate configuration
+        errors = tech_config.validate_configuration()
+        
+        if errors:
+            st.error("### Configuration Errors:")
+            for err in errors:
+                st.error(f"  • {err}")
+        else:
+            st.success("✅ Configuration is valid")
+    
+    with tab_generation:
+        st.subheader("Generation")
+        
+        # Generation chart
+        st.plotly_chart(create_generation_chart(tech_config, horizon), use_container_width=True)
+        
+        # Show by year table
+        data = []
+        for y in range(1, min(11, horizon + 1)):
+            data.append({
+                "Year": y,
+                "P50 (MWh)": round(tech_config.annual_generation_mwh(y, "P50")),
+                "P90-1y (MWh)": round(tech_config.annual_generation_mwh(y, "P90-1y")),
+                "P90-10y (MWh)": round(tech_config.annual_generation_mwh(y, "P90-10y")),
+                "P99-1y (MWh)": round(tech_config.annual_generation_mwh(y, "P99-1y")),
+            })
+        
+        st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
+    
+    with tab_revenue:
+        st.subheader("Revenue")
+        
+        # Show revenue config summary
+        col_a, col_b = st.columns(2)
+        
+        with col_a:
+            if revenue_config.ppa and revenue_config.ppa.ppa_enabled:
+                st.metric("PPA cijena", f"{revenue_config.ppa.ppa_base_price_eur_mwh:.0f} EUR/MWh")
+                st.metric("PPA trajanje", f"{revenue_config.ppa.ppa_term_years} god")
+                st.metric("PPA volume", f"{revenue_config.ppa.ppa_volume_share*100:.0f}%")
+            elif revenue_config.merchant and revenue_config.merchant.merchant_enabled:
+                st.metric("Merchant cijena", f"{revenue_config.merchant.base_price_eur_mwh:.0f} EUR/MWh")
+                st.metric("Capture rate", f"{revenue_config.merchant.capture_rate_solar*100:.0f}%")
+        
+        with col_b:
+            gen_y1 = tech_config.annual_generation_mwh(1, "P50")
+            rev_y1 = revenue_config.total_annual_revenue_keur(gen_y1, 1, tech_type.split("_")[0])
+            rev_y5 = revenue_config.total_annual_revenue_keur(tech_config.annual_generation_mwh(5, "P50"), 5, tech_type.split("_")[0])
+            
+            st.metric("Y1 Revenue (P50)", f"{rev_y1:,.0f} kEUR")
+            st.metric("Y5 Revenue (P50)", f"{rev_y5:,.0f} kEUR")
+        
+        # Revenue chart
+        st.plotly_chart(create_revenue_chart(revenue_config, gen_y1, tech_type.split("_")[0]), use_container_width=True)
+    
+    with tab_debt:
+        st.subheader("Debt Structure")
+        
+        # Show debt summary
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Gearing", f"{debt_config.senior.gearing_ratio*100:.1f}%")
+            st.metric("Senior tenor", f"{debt_config.senior.tenor_years} god")
+        
+        with col2:
+            st.metric("All-in Rate", f"{debt_config.senior.all_in_rate*100:.2f}%")
+            st.metric("Target DSCR", f"{debt_config.senior.target_dscr:.2f}x")
+        
+        with col3:
+            wACD = debt_config.weighted_average_cost_of_debt(100000)
+            st.metric("WACD", f"{wACD*100:.2f}%")
+            st.metric("DSRA Months", f"{debt_config.senior.dsra_months}")
+        
+        # Show SHL and Mezz if enabled
+        if debt_config.shl and debt_config.shl.shl_enabled:
+            st.markdown("---")
+            st.write(f"**SHL:** {debt_config.shl.shl_keur:,.0f} kEUR @ {debt_config.shl.shl_rate*100:.1f}%")
+        
+        if debt_config.mezzanine and debt_config.mezzanine.mezzanine_enabled:
+            st.markdown("---")
+            st.write(f"**Mezzanine:** {debt_config.mezzanine.mezzanine_keur:,.0f} kEUR @ {debt_config.mezzanine.mezz_rate*100:.1f}%")
+    
+    with tab_tax:
+        st.subheader("Tax Parameters")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Corporate Tax", f"{tax_config.corporate_tax_rate*100:.1f}%")
+            st.metric("Loss Carryforward", f"{tax_config.loss_carryforward_years} years")
+        with col2:
+            st.metric("ATAD", "Yes" if tax_config.atad_applies else "No")
+            st.metric("ATAD Limit", f"{tax_config.atad_ebitda_limit*100:.0f}% EBITDA")
+        with col3:
+            st.metric("VAT Rate", f"{tax_config.vat_rate*100:.1f}%")
+            st.metric("WHT Dividends", f"{tax_config.wdt_dividends*100:.1f}%")
+        
+        col4, col5 = st.columns(2)
+        with col4:
+            st.metric("Thin Cap", f"D/E {tax_config.thin_cap_ratio:.1f}x" if tax_config.thin_cap_enabled else "N/A")
+        
+        st.markdown("### Tax Calculation")
+        st.info("Tax is calculated as: max(0, EBITDA - Interest - Depreciation) × Tax Rate")
+        st.info("ATAD limits deductible interest to 30% of EBITDA (for EU jurisdictions)")
+    
+    with tab_regulatory:
+        st.subheader("Regulatory Parameters")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Jurisdiction", regulatory_config.jurisdiction)
+            st.metric("Permits Timeline", f"{regulatory_config.permitting_timeline_months} months")
+        with col2:
+            st.metric("Grid Type", regulatory_config.grid_connection_type)
+            st.metric("Congestion Risk", regulatory_config.grid_congestion_risk)
+        with col3:
+            st.metric("Curtailment", f"{regulatory_config.mandatory_curtailment_pct*100:.1f}%")
+            st.metric("GO/REC", f"{regulatory_config.rec_price_eur_mwh:.2f} EUR/MWh" if regulatory_config.rec_enabled else "N/A")
+        
+        # REC revenue
+        if regulatory_config.rec_enabled:
+            gen_y1 = tech_config.annual_generation_mwh(1, "P50")
+            rec_rev = regulatory_config.rec_revenue_keur(gen_y1)
+            st.metric("Y1 REC Revenue", f"{rec_rev:,.0f} kEUR")
+    
+    with tab_validation:
+        st.subheader("Configuration Validation")
+        
+        # Technology validation
+        st.markdown("### Technology")
+        tech_errors = tech_config.validate_configuration()
+        if tech_errors:
+            for err in tech_errors:
+                st.error(f"❌ {err}")
+        else:
+            st.success("✅ Technology: valjano")
+        
+        # Debt validation
+        st.markdown("### Debt")
+        debt_errors = debt_config.validate_configuration()
+        if debt_errors:
+            for err in debt_errors:
+                st.error(f"❌ {err}")
+        else:
+            st.success("✅ Debt: valjano")
+        
+        # Warnings based on benchmarks
+        st.markdown("### Benchmark Warnings")
+        
+        if tech_config.solar:
+            # Check capex benchmarks for solar (EUR/MWp)
+            capex_per_mwp = 750000  # Approximate - would need actual capex input
+            if capex_per_mwp < 650000 or capex_per_mwp > 870000:
+                st.warning(f"⚠️ Solar CAPEX deviates from benchmark (700-850k EUR/MWp)")
+        
+        if tech_config.wind:
+            st.info("ℹ️ Wind projects: benchmark 1.0-1.4M EUR/MW")
+        
+        if tech_config.bess:
+            st.info("ℹ️ BESS projects: benchmark 180-260k EUR/MWh")
+
+
+if __name__ == "__main__":
+    main()

@@ -236,50 +236,52 @@ class DebtConfig:
         """
         return total_capex_keur - self.total_debt_keur(total_capex_keur)
     
-    def weighted_average_cost_of_debt(self) -> float:
+    def weighted_average_cost_of_debt(self, total_capex_keur: float = 0.0) -> float:
         """Calculate weighted average cost of debt (WACD).
+        
+        Args:
+            total_capex_keur: Total project CAPEX for computing senior debt if not set
         
         Returns:
             WACD as decimal (e.g., 0.07 = 7%)
         """
-        total = self.total_debt_keur()
-        if total <= 0:
+        # Senior amount
+        senior_amt = self.senior.senior_debt_keur
+        if senior_amt <= 0 and total_capex_keur > 0:
+            senior_amt = total_capex_keur * self.senior.gearing_ratio
+        
+        if senior_amt <= 0:
             return 0.0
         
         # Senior cost (blended floating + fixed)
-        senior_cost = 0.0
-        if self.senior.gearing_ratio > 0 or self.senior.senior_debt_keur > 0:
-            senior_amount = self.senior.senior_debt_keur if self.senior.senior_debt_keur > 0 else total * self.senior.gearing_ratio
-            senior_cost = (self.senior.all_in_rate_floating * self.senior.floating_share +
-                          self.senior.all_in_rate_fixed * self.senior.fixed_share)
+        senior_cost = (self.senior.all_in_rate_floating * self.senior.floating_share +
+                      self.senior.all_in_rate_fixed * self.senior.fixed_share)
         
-        # Mezz cost (PIK + cash split)
-        mezz_cost = 0.0
-        if self.mezzanine and self.mezzanine.mezzanine_enabled:
-            mezz_rate = (self.mezzanine.pik_rate * self.mezzanine.pik_interest + 
-                        self.mezzanine.cash_rate * (1 - self.mezzanine.pik_interest))
-            mezz_cost = mezz_rate
+        # Mezz amount
+        mezz_amt = self.mezzanine.mezzanine_keur if (self.mezzanine and self.mezzanine.mezzanine_enabled) else 0.0
+        
+        # SHL amount
+        shl_amt = self.shl.shl_keur if (self.shl and self.shl.shl_enabled) else 0.0
+        
+        # Total debt for weighting
+        total_debt = senior_amt + mezz_amt + shl_amt
+        
+        if total_debt <= 0:
+            return 0.0
+        
+        # Weighted sum
+        weighted = senior_cost * senior_amt
+        
+        # Mezz cost
+        if mezz_amt > 0:
+            mezz_cost = self.mezzanine.mezz_rate if self.mezzanine else 0.10
+            weighted += mezz_cost * mezz_amt
         
         # SHL cost
-        shl_cost = 0.0
-        if self.shl and self.shl.shl_enabled:
-            shl_cost = self.shl.shl_rate
+        if shl_amt > 0:
+            weighted += self.shl.shl_rate * shl_amt
         
-        # Weighted average
-        weighted = 0.0
-        total_amount = self.total_debt_keur()
-        
-        if self.senior.senior_debt_keur > 0 or (self.senior.gearing_ratio > 0 and total_capex_keur > 0):
-            senior_amt = self.senior.senior_debt_keur if self.senior.senior_debt_keur > 0 else total * self.senior.gearing_ratio
-            weighted += senior_cost * senior_amt
-        
-        if self.mezzanine and self.mezzanine.mezzanine_enabled:
-            weighted += mezz_cost * self.mezzanine.mezzanine_keur
-        
-        if self.shl and self.shl.shl_enabled:
-            weighted += shl_cost * self.shl.shl_keur
-        
-        return weighted / total_amount if total_amount > 0 else 0.0
+        return weighted / total_debt
     
     def validate_configuration(self) -> list[str]:
         """Validate debt configuration consistency.
