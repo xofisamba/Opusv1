@@ -25,6 +25,7 @@ from domain.models import (
 )
 from domain.waterfall.waterfall_engine import cached_run_waterfall
 from domain.period_engine import PeriodEngine
+from app.builder import _build_engine_from_inputs
 from src.ui.charts import (
     create_waterfall_summary_chart, 
     create_dscr_chart,
@@ -1148,9 +1149,9 @@ def main():
         
         # Run waterfall calculation
         try:
-            # Build ProjectInputs from current config
+            # Build ProjectInputs from current config  
             inputs = ProjectInputs.create_default_oborovo()
-            engine = PeriodEngine.from_tech_config(tech_config, horizon)
+            engine = _build_engine_from_inputs(inputs)
             
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
