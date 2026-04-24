@@ -23,7 +23,6 @@ from domain.models import (
     SolarCapexBreakdown, WindCapexBreakdown, BESSCapexBreakdown,
     SolarOpexParams, WindOpexParams, BESSOpexParams,
 )
-from domain.waterfall.waterfall_engine import cached_run_waterfall  # legacy
 from utils.cache import cached_run_waterfall_v3  # v3: proper hash_funcs
 from domain.period_engine import PeriodEngine, PeriodFrequency as PF
 from domain.inputs import ProjectInputs, PeriodFrequency
@@ -452,11 +451,14 @@ def render_agrivoltaic_inputs() -> TechnologyConfig:
         0, 2000, 500, step=50
     )
     
-    # Update solar params
+    # Update solar params using replace (frozen dataclass)
+    from dataclasses import replace
     solar = solar_config.solar
-    solar.agrivoltaic_enabled = True
-    solar.agrivoltaic_yield_reduction = agrivoltaic_reduction
-    solar.agrivoltaic_land_rental_premium = land_premium
+    solar = replace(solar,
+        agrivoltaic_enabled=True,
+        agrivoltaic_yield_reduction=agrivoltaic_reduction,
+        agrivoltaic_land_rental_premium=land_premium,
+    )
     
     return TechnologyConfig(technology_type="agrivoltaic", solar=solar)
 
@@ -1240,7 +1242,7 @@ def main():
         st.subheader("Generation")
         
         # Generation chart
-        st.plotly_chart(create_generation_chart(tech_config, horizon), width="stretch", config=CHART_CONFIG)
+        st.plotly_chart(create_generation_chart(tech_config, horizon), config=CHART_CONFIG)
         
         # Show by year table
         data = []
@@ -1253,7 +1255,7 @@ def main():
                 "P99-1y (MWh)": round(tech_config.annual_generation_mwh(y, "P99-1y")),
             })
         
-        st.dataframe(pd.DataFrame(data), width="stretch", hide_index=True)
+        st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
     
     with tab_revenue:
         st.subheader("Revenue")
@@ -1279,7 +1281,7 @@ def main():
             st.metric("Y5 Revenue (P50)", f"{rev_y5:,.0f} kEUR")
         
         # Revenue chart
-        st.plotly_chart(create_revenue_chart(revenue_config, gen_y1, tech_type.split("_")[0]), width="stretch", config=CHART_CONFIG)
+        st.plotly_chart(create_revenue_chart(revenue_config, gen_y1, tech_type.split("_")[0]), config=CHART_CONFIG)
     
     with tab_debt:
         st.subheader("Debt Structure")
@@ -1532,12 +1534,12 @@ def main():
             # Waterfall chart
             st.markdown("### Cash Flow Waterfall")
             wf_chart = create_waterfall_summary_chart(result)
-            st.plotly_chart(wf_chart, width="stretch", config=CHART_CONFIG)
+            st.plotly_chart(wf_chart, config=CHART_CONFIG)
             
             # DSCR chart
             st.markdown("### DSCR Over Time")
             dscr_chart = create_dscr_chart(result)
-            st.plotly_chart(dscr_chart, width="stretch", config=CHART_CONFIG)
+            st.plotly_chart(dscr_chart, config=CHART_CONFIG)
             
         except Exception as e:
             st.error(f"Waterfall calculation failed: {str(e)}")
