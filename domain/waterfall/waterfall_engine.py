@@ -423,7 +423,8 @@ def run_waterfall(
         
         # LLCR/PLCR — operation-relative: remaining FCF from current op period
         remaining_fcf = ebitda_schedule[op_period_counter:]
-        balance_idx = period_in_tenor + 1 if period_in_tenor + 1 < len(balance_schedule) else period_in_tenor
+        # Closing balance: next period's balance, capped at last index
+        balance_idx = min(period_in_tenor + 1, len(balance_schedule) - 1) if balance_schedule else 0
         remaining_balance = balance_schedule[balance_idx] if balance_schedule else 0
         llcr_val = compute_llcr(remaining_fcf, remaining_balance, rate_per_period, tenor_periods - period_in_tenor)
         plcr_val = compute_plcr(remaining_fcf, remaining_balance, rate_per_period, len(remaining_fcf))
