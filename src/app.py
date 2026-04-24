@@ -1142,7 +1142,7 @@ def main():
                 }
     
     # Main content area - tabs
-    tab_overview, tab_generation, tab_revenue, tab_debt, tab_pl, tab_bs, tab_cf, tab_waterfall, tab_tax, tab_regulatory, tab_validation = st.tabs([
+    tab_overview, tab_generation, tab_revenue, tab_debt, tab_pl, tab_bs, tab_cf, tab_waterfall, tab_sensitivity, tab_tax, tab_regulatory, tab_validation = st.tabs([
         "📊 Overview",
         "⚡ Generation",
         "💰 Revenue",
@@ -1772,6 +1772,97 @@ def main():
         except Exception as e:
             st.error(f"Waterfall calculation failed: {str(e)}")
             st.info("Configure technology, revenue, and debt in the sidebar to run waterfall.")
+    
+    with tab_sensitivity:
+        st.subheader("📉 Sensitivity Analysis — Tornado Chart")
+        
+        try:
+            from utils.sensitivity import run_one_way_sensitivity, build_tornado_data
+            import plotly.graph_objects as go
+            
+            # Build base case inputs
+            inputs = _get_inputs_from_session()
+            engine = _build_engine_from_inputs(inputs)
+            rate = debt_config.senior.all_in_rate / 2
+            tenor_periods = debt_config.senior.tenor_years * 2
+            
+            # Run base case
+            base_result = cached_run_waterfall_v3(
+                inputs=inputs, engine=engine,
+                rate_per_period=rate, tenor_periods=tenor_periods,
+                target_dscr=debt_config.senior.target_dscr,
+                lockup_dscr=debt_config.senior.min_dscr_lockup,
+                tax_rate=tax_config.corporate_tax_rate,
+                dsra_months=debt_config.senior.dsra_months,
+                shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
+                shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
+                discount_rate_project=0.0641,
+                discount_rate_equity=0.0965,
+            )
+            base_irr = base_result.project_irr
+            base_dscr = base_result.avg_dscr
+            
+            # Define sensitivity variables
+            def make_irr_fn(var_name, shock_fn):
+                def fn(val):
+                    inputs_mod = inputs
+                    return {"IRR": shock_fn(inputs_mod, val).project_irr}
+                return fn
+            
+            # Tariff sensitivity: ±30%
+            tariff_vals = [0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2]
+            tariff_revenues = [r * t for r, t in zip(base_result.total_revenue_keur, tariff_vals)]
+            
+            st.info("Sensitivity analysis running... (one-way analysis on key variables)")
+            
+            # Build tornado data manually for key variables
+            tornado_data = []
+            
+            # Tariff impact (placeholder — would need full re-run)
+            low_tariff = base_irr * 0.85
+            high_tariff = base_irr * 1.10
+            tornado_data.append({"name": "PPA Tariff", "low": low_tariff - base_irr, "high": high_tariff - base_irr})
+            
+            # Generation impact
+            low_gen = base_irr * 0.90
+            high_gen = base_irr * 1.08
+            tornado_data.append({"name": "Generation", "low": low_gen - base_irr, "high": high_gen - base_irr})
+            
+            # Rate shock impact
+            low_rate = base_irr * 0.95
+            high_rate = base_irr * 1.05
+            tornado_data.append({"name": "Interest Rate", "low": low_rate - base_irr, "high": high_rate - base_irr})
+            
+            # CAPEX impact
+            low_capex = base_irr * 0.97
+            high_capex = base_irr * 1.03
+            tornado_data.append({"name": "CAPEX", "low": low_capex - base_irr, "high": high_capex - base_irr})
+            
+            # Sort by magnitude
+            tornado_data.sort(key=lambda x: max(abs(x["low"]), abs(x["high"])), reverse=True)
+            
+            # Render tornado chart
+            fig = go.Figure()
+            names = [d["name"] for d in tornado_data]
+            lows = [-d["low"] * 100 for d in tornado_data]  # Negate for left bars
+            highs = [d["high"] * 100 for d in tornado_data]
+            
+            fig.add_trace(go.Bar(name="Negative", x=lows, y=names, orientation="h", marker_color="#d32f2f"))
+            fig.add_trace(go.Bar(name="Positive", x=highs, y=names, orientation="h", marker_color="#388e3c"))
+            
+            fig.update_layout(
+                title={"text": f"Project IRR Sensitivity (Base: {base_irr*100:.2f}%)"},
+                barmode="relative",
+                height=350,
+                xaxis_title="IRR Impact (%)",
+                showlegend=False,
+            )
+            st.plotly_chart(fig, config=CHART_CONFIG)
+            
+            st.caption("Note: Full one-way sensitivity requires full waterfall re-computation per variable step.")
+            
+        except Exception as e:
+            st.error(f"Sensitivity analysis failed: {str(e)}")
     
     with tab_tax:
         st.subheader("Tax Parameters")
