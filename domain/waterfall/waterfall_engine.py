@@ -38,6 +38,7 @@ class WaterfallPeriod:
     period: int
     date: date
     year_index: int
+    period_in_year: int  # 1=H1, 2=H2 (for semi-annual model)
     # Revenue section
     generation_mwh: float
     revenue_keur: float
@@ -273,6 +274,7 @@ def run_waterfall(
                 period=period.index,
                 date=period.end_date,
                 year_index=period.year_index,
+                period_in_year=period.period_in_year,
                 generation_mwh=0,
                 revenue_keur=0,
                 opex_keur=0,
@@ -396,6 +398,7 @@ def run_waterfall(
             period=period.index,
             date=period.end_date,
             year_index=period.year_index,
+            period_in_year=period.period_in_year,
             generation_mwh=gen,
             revenue_keur=rev,
             opex_keur=rev - ebitda,
