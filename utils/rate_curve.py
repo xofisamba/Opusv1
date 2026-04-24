@@ -18,7 +18,7 @@ EURIBOR_3M_SPOT = 0.0375  # ~3.75% as of Q1 2026
 
 # Euribor forward curve (implied forward rates, semi-annual tenors)
 EURIBOR_6M_FORWARDS = (
-    0.0395,  # 6M: 6M, 12M, 18M...
+    0.0382,  # 6M: 6M forward = spot (3.82%). Note: forward[0] should = spot.
     0.0410,
     0.0425,
     0.0435,
@@ -36,7 +36,7 @@ EURIBOR_6M_FORWARDS = (
 )
 
 EURIBOR_3M_FORWARDS = (
-    0.0385,  # 3M: 3M, 6M, 9M...
+    0.0375,  # 3M: 3M forward = spot (3.75%). Note: forward[0] should = spot.
     0.0398,
     0.0410,
     0.0420,
