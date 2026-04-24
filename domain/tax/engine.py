@@ -16,6 +16,43 @@ from typing import Optional
 from dataclasses import dataclass
 
 
+# =============================================================================
+# TAX PERIOD HELPERS
+# =============================================================================
+
+def is_tax_payment_period(period_in_year: int) -> bool:
+    """Income tax is paid once per year — always in H2.
+
+    HR Zakon o porezu na dobit: tax is determined annually,
+    advance payments are made monthly but in the model we use annual.
+    In semi-annual model: tax is shown in H2 (period_in_year == 2).
+    """
+    return period_in_year == 2
+
+
+def annual_tax_for_period(
+    h1_taxable: float,
+    h2_taxable: float,
+    tax_rate: float,
+) -> tuple[float, float]:
+    """Calculate annual tax and allocate to H2.
+
+    Tax is calculated annually but shown in H2 period.
+    H1 tax is always 0, all annual tax is in H2.
+
+    Args:
+        h1_taxable: Taxable profit in H1
+        h2_taxable: Taxable profit in H2
+        tax_rate: Corporate tax rate (decimal)
+
+    Returns:
+        (h1_tax, h2_tax) — h1_tax is always 0
+    """
+    annual_taxable = h1_taxable + h2_taxable
+    annual_tax = max(0.0, annual_taxable * tax_rate)
+    return 0.0, annual_tax  # All tax in H2
+
+
 @dataclass
 class TaxResult:
     """Result of tax calculation for a period."""

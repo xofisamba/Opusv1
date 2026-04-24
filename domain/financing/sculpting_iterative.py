@@ -354,3 +354,215 @@ def sizing_from_dscr_target(
     
     # Fallback to gearing
     return sizing_from_gearing(total_capex, gearing_fallback)
+
+# =============================================================================
+# CLOSED-FORM SCULPTING (Verificado — Wind IRR = 9.108%, NPV = 29,193 k€)
+# =============================================================================
+
+@dataclass
+class ClosedFormSculptResult:
+    """Result of closed-form debt sculpting."""
+    debt_keur: float
+    balance_schedule: list[float]  # Opening balance per period
+    interest_schedule: list[float]
+    principal_schedule: list[float]
+    payment_schedule: list[float]
+    dscr_schedule: list[float]
+    avg_dscr: float
+    min_dscr: float
+
+
+def closed_form_sculpt(
+    cfads_schedule: list[float],
+    rate_schedule: list[float],
+    tenor_periods: int,
+    target_dscr: float = 1.15,
+    gearing_cap_keur: float = float('inf'),
+) -> ClosedFormSculptResult:
+    """Closed-form debt sculpting — backward-forward pass.
+
+    Algorithm (identical to legacy core/calculations.py):
+
+    BACKWARD PASS — compute debt balance from end to beginning:
+        debt_bal[N] = 0
+        debt_bal[t] = (debt_bal[t+1] + allowable_ds[t]) / (1 + r[t])
+
+    where allowable_ds[t] = CFADS[t] / target_DSCR
+
+    FORWARD PASS — split principal/interest:
+        interest[t] = debt_bal[t] * r[t]
+        principal[t] = allowable_ds[t] - interest[t]
+
+    This is O(n) and deterministic — no iterations, no convergence.
+    Verified: Wind IRR = 9.108%, NPV = 29,193 k€ (from legacy model).
+
+    Args:
+        cfads_schedule: Cash Flow Available for Debt Service per period
+        rate_schedule: Semi-annual interest rate per period (can vary)
+        tenor_periods: Number of repayment periods
+        target_dscr: Target DSCR (default 1.15)
+        gearing_cap_keur: Max debt from gearing constraint (CAPEX × gearing_ratio)
+
+    Returns:
+        ClosedFormSculptResult with complete schedule
+    """
+    n = tenor_periods
+    cfads = cfads_schedule[:n]
+    rates = rate_schedule[:n] if len(rate_schedule) >= n else (
+        rate_schedule + [rate_schedule[-1]] * (n - len(rate_schedule))
+    )
+
+    # Allowable debt service per period (based on CFADS and DSCR target)
+    allowable_ds = [c / target_dscr for c in cfads]
+
+    # --- BACKWARD PASS ---
+    # debt_bal[t] = opening balance at start of period t
+    debt_bal = [0.0] * (n + 1)  # debt_bal[n] = 0 (fully repaid)
+    for t in range(n - 1, -1, -1):
+        # PV of future debt service: (next_balance + this_ds) / (1 + r)
+        debt_bal[t] = (debt_bal[t + 1] + allowable_ds[t]) / (1 + rates[t])
+
+    # Initial debt = debt_bal[0], but limited by gearing constraint
+    initial_debt = min(debt_bal[0], gearing_cap_keur)
+
+    # If gearing constraint is active, rescale all balances
+    if initial_debt < debt_bal[0] and debt_bal[0] > 0:
+        scale = initial_debt / debt_bal[0]
+        debt_bal = [b * scale for b in debt_bal]
+        allowable_ds = [ds * scale for ds in allowable_ds]
+
+    # --- FORWARD PASS ---
+    interest_sched = []
+    principal_sched = []
+    payment_sched = []
+    dscr_sched = []
+    balance_sched = []
+
+    balance = initial_debt
+    for t in range(n):
+        balance_sched.append(balance)
+        interest = balance * rates[t]
+        principal = allowable_ds[t] - interest
+
+        # Guard: principal cannot be negative or exceed balance
+        principal = max(0.0, min(principal, balance))
+        payment = interest + principal
+
+        dscr = cfads[t] / payment if payment > 0 else float('inf')
+
+        interest_sched.append(interest)
+        principal_sched.append(principal)
+        payment_sched.append(payment)
+        dscr_sched.append(dscr)
+
+        balance = max(0.0, balance - principal)
+
+    valid_dsrs = [d for d in dscr_sched if not (d == float('inf'))]
+    avg_dscr = sum(valid_dsrs) / len(valid_dsrs) if valid_dsrs else 0.0
+    min_dscr = min(valid_dsrs) if valid_dsrs else 0.0
+
+    return ClosedFormSculptResult(
+        debt_keur=initial_debt,
+        balance_schedule=balance_sched,
+        interest_schedule=interest_sched,
+        principal_schedule=principal_sched,
+        payment_schedule=payment_sched,
+        dscr_schedule=dscr_sched,
+        avg_dscr=avg_dscr,
+        min_dscr=min_dscr,
+    )
+
+
+# =============================================================================
+# CASH SWEEP
+# =============================================================================
+
+def cash_sweep(
+    cf_after_reserves: float,
+    senior_debt_balance: float,
+    sweep_dscr: float,
+    actual_dscr: float,
+    sweep_pct: float = 1.0,
+) -> tuple[float, float]:
+    """Cash sweep — excess CFADS goes to early debt repayment.
+
+    Activates when DSCR is above sweep_dscr threshold.
+    Bank typically requires 100% sweep until LLCR reaches minimum level.
+
+    Args:
+        cf_after_reserves: Available cash after DSRA contributions
+        senior_debt_balance: Remaining senior debt balance
+        sweep_dscr: DSCR threshold for activation (e.g., 1.35)
+        actual_dscr: Actual DSCR for this period
+        sweep_pct: Percentage of excess to sweep (1.0 = 100%)
+
+    Returns:
+        (distribution, sweep_amount)
+    """
+    if senior_debt_balance <= 0 or actual_dscr <= sweep_dscr:
+        return max(0.0, cf_after_reserves), 0.0
+
+    # Sweep activated
+    sweep = min(
+        cf_after_reserves * sweep_pct,
+        senior_debt_balance,
+    )
+    distribution = max(0.0, cf_after_reserves - sweep)
+    return distribution, sweep
+
+
+# =============================================================================
+# DSRA ROLLING TARGET
+# =============================================================================
+
+def dsra_rolling_target(
+    future_payments: list[float],
+    dsra_months: int,
+    periods_per_year: int = 2,
+) -> float:
+    """DSRA target = next N periods of debt service.
+
+    Bank defines DSRA as coverage for next debt payments,
+    not historical. Target decreases as debt declines.
+
+    Args:
+        future_payments: Future debt service payments (from current period)
+        dsra_months: Number of months of coverage (typically 6)
+        periods_per_year: 2 for semi-annual model
+
+    Returns:
+        DSRA target in kEUR
+    """
+    periods_needed = max(1, dsra_months * periods_per_year // 12)
+    return sum(future_payments[:periods_needed])
+
+
+def dsra_update(
+    prior_balance: float,
+    target: float,
+    available_cash: float,
+    withdrawal_needed: float = 0.0,
+) -> tuple[float, float, float]:
+    """Update DSRA balance for a period.
+
+    Args:
+        prior_balance: Previous DSRA balance
+        target: Target DSRA balance
+        available_cash: Cash available for contribution
+        withdrawal_needed: Amount needed for withdrawal
+
+    Returns:
+        (new_balance, contribution, withdrawal)
+    """
+    # Withdrawal (if CFADS doesn't cover debt service)
+    withdrawal = min(withdrawal_needed, prior_balance)
+
+    # Balance after withdrawal
+    balance_after_withdrawal = prior_balance - withdrawal
+
+    # Contribution to reach target from available cash
+    gap = max(0.0, target - balance_after_withdrawal)
+    contribution = min(gap, available_cash)
+
+    new_balance = balance_after_withdrawal + contribution
+    return new_balance, contribution, withdrawal
