@@ -194,6 +194,7 @@ class TechnicalParams:
     yield_scenario: str            # Inputs!D52 - "P_50", "P90-10y", etc.
     operating_hours_p50: float    # Inputs!D64 - P50 yield hours (1,494)
     operating_hours_p90_10y: float  # Inputs!D68 - P90-10y hours (1,410)
+    operating_hours_p99_1y: float | None = None  # P99-1y hours (scenario engine)
     pv_degradation: float = 0.004  # Inputs!D56 - Annual degradation (0.4%)
     bess_degradation: float = 0.003  # Inputs!D57 - BESS degradation (0.3%)
     plant_availability: float = 0.99  # Inputs!D58 - Plant availability (99%)
