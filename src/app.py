@@ -1155,15 +1155,8 @@ def main():
         
         # Run waterfall to get P&L data
         try:
-            inputs = ProjectInputs.create_default_oborovo()
-            freq = PF.SEMESTRIAL if inputs.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
-            engine = PeriodEngine(
-                financial_close=inputs.info.financial_close,
-                construction_months=inputs.info.construction_months,
-                horizon_years=inputs.info.horizon_years,
-                ppa_years=inputs.revenue.ppa_term_years,
-                frequency=freq,
-            )
+            inputs = _get_inputs_from_session()
+            engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
             
@@ -1214,15 +1207,8 @@ def main():
         st.subheader("Balance Sheet")
         
         try:
-            inputs = ProjectInputs.create_default_oborovo()
-            freq = PF.SEMESTRIAL if inputs.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
-            engine = PeriodEngine(
-                financial_close=inputs.info.financial_close,
-                construction_months=inputs.info.construction_months,
-                horizon_years=inputs.info.horizon_years,
-                ppa_years=inputs.revenue.ppa_term_years,
-                frequency=freq,
-            )
+            inputs = _get_inputs_from_session()
+            engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
             
@@ -1285,15 +1271,8 @@ def main():
         st.subheader("Cash Flow Statement")
         
         try:
-            inputs = ProjectInputs.create_default_oborovo()
-            freq = PF.SEMESTRIAL if inputs.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
-            engine = PeriodEngine(
-                financial_close=inputs.info.financial_close,
-                construction_months=inputs.info.construction_months,
-                horizon_years=inputs.info.horizon_years,
-                ppa_years=inputs.revenue.ppa_term_years,
-                frequency=freq,
-            )
+            inputs = _get_inputs_from_session()
+            engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
             
@@ -1346,18 +1325,8 @@ def main():
         
         # Run waterfall calculation
         try:
-            # Build ProjectInputs from current config
-            inputs = ProjectInputs.create_default_oborovo()
-            # Build period engine inline (avoid app.builder import issue)
-            freq = PF.SEMESTRIAL if inputs.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
-            engine = PeriodEngine(
-                financial_close=inputs.info.financial_close,
-                construction_months=inputs.info.construction_months,
-                horizon_years=inputs.info.horizon_years,
-                ppa_years=inputs.revenue.ppa_term_years,
-                frequency=freq,
-            )
-            
+            inputs = _get_inputs_from_session()
+            engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
             
