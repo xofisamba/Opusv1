@@ -334,6 +334,7 @@ def build_balance_sheet(
     rows = []
     retained_earnings = 0.0
     accumulated_fin_dep = 0.0
+    shl_remaining = shl_initial_keur  # Track SHL balance across years
 
     for inc in income_rows:
         year = inc.year
@@ -360,8 +361,14 @@ def build_balance_sheet(
             senior_balance = 0.0
             current_senior = 0.0
 
-        # SHL (simplified — bullet repayment)
-        shl_balance = shl_initial_keur
+        # SHL (track repayments from waterfall periods)
+        # Sum SHL principal from all periods in this year
+        year_shl_principal = 0.0
+        for d in debt_schedule:
+            if d.year == year:
+                year_shl_principal += getattr(d, 'shl_principal_keur', 0.0)
+        shl_remaining = max(0.0, shl_remaining - year_shl_principal)
+        shl_balance = shl_remaining
 
         # Total assets
         total_assets = net_fixed + total_current

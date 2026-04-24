@@ -81,6 +81,8 @@ class WaterfallPeriod:
     cum_distribution_keur: float
     # Cash balance
     cash_balance_keur: float
+    # Debt schedule tracking (for financial statements)
+    senior_balance_keur: float = 0.0  # Closing balance after principal payment
 
 
 @dataclass
@@ -352,6 +354,7 @@ def run_waterfall(
                 cash_sweep_keur=0,
                 cum_distribution_keur=cum_distribution,
                 cash_balance_keur=cash_balance,
+                senior_balance_keur=0.0,
             ))
             project_cfs.append(0)
             equity_cfs.append(0)
@@ -519,6 +522,7 @@ def run_waterfall(
             cash_sweep_keur=sweep_amount,
             cum_distribution_keur=cum_distribution,
             cash_balance_keur=cash_balance,
+            senior_balance_keur=remaining_debt_balance,  # Closing debt balance after this period
         )
         
         waterfall_periods.append(wp)

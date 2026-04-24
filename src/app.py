@@ -92,10 +92,27 @@ def _apply_sensitivity_shocks(inputs: ProjectInputs, shocks: dict) -> ProjectInp
     shock_capex = shocks.get('capex', 0)
     if shock_capex != 0:
         capex = inputs.capex
-        inputs = replace(inputs, capex=replace(
-            capex,
-            total_capex_keur=capex.total_capex_keur * (1 + shock_capex)
-        ))
+        # CAPEX shock: scale all individual capex items by (1 + shock_capex)
+        capex_items = [
+            capex.epc_contract, capex.production_units, capex.epc_other,
+            capex.grid_connection, capex.ops_prep, capex.insurances,
+            capex.lease_tax, capex.construction_mgmt_a, capex.commissioning,
+            capex.audit_legal, capex.construction_mgmt_b, capex.contingencies,
+            capex.taxes, capex.project_acquisition, capex.project_rights,
+        ]
+        scale = 1 + shock_capex
+        scaled_items = {}
+        for attr in ['epc_contract', 'production_units', 'epc_other', 'grid_connection',
+                     'ops_prep', 'insurances', 'lease_tax', 'construction_mgmt_a',
+                     'commissioning', 'audit_legal', 'construction_mgmt_b',
+                     'contingencies', 'taxes', 'project_acquisition', 'project_rights']:
+            item = getattr(capex, attr)
+            scaled_items[attr] = CapexItem(
+                name=item.name,
+                amount_keur=item.amount_keur * scale,
+                y0_share=item.y0_share,
+            )
+        inputs = replace(inputs, capex=replace(capex, **scaled_items))
     
     return inputs
 
