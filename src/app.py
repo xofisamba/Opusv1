@@ -1215,6 +1215,8 @@ def main():
         "📊 Balance Sheet",
         "💵 Cash Flow",
         "📈 Waterfall",
+        "📉 Sensitivity",
+        "🏦 Covenant",
         "🏛️ Tax",
         "📜 Regulatory",
         "✅ Validation"
