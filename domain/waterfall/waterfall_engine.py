@@ -28,6 +28,7 @@ from domain.financing.sculpting_iterative import (
 from domain.financing.schedule import senior_debt_amount
 from domain.returns.xirr import xirr, xnpv
 from domain.period_engine import hash_engine_for_cache
+from domain.tax.engine import atad_adjustment
 from utils.logging_config import get_logger
 
 _log = get_logger(__name__)  # Module-level logger (defined once, not per-function)
@@ -258,6 +259,7 @@ def run_waterfall(
     prior_tax_loss = 0
     fiscal_reintegration = 0
     fiscal_reintegration_applied = False  # BUG-5 fix: flag for fiscal reintegration
+    loss_carryforward_cap = 1.0  # ATAD: loss cap at 100% of EBITDA
     op_period_counter = 0  # BUG-3 fix: counter for operation periods (not year_index)
     
     # For returns calculation
@@ -343,18 +345,31 @@ def run_waterfall(
             shp = 0
             shl_svc = 0
         
-        # Tax calculation
-        # BUG-5 fix: fiscal reintegration applies only once, using flag
+        # ATAD-based tax calculation with fiscal reintegration
+        # Interest deductibility limited to 30% of EBITDA (ATAD directive)
+        total_interest = si + shi
+        deductible_interest, disallowed_addback = atad_adjustment(
+            total_interest, ebitda, atad_ebitda_limit=0.30
+        )
+        
+        # Fiscal reintegration: IDC and upfront fees added back to taxable profit
+        # (HR tax law — only once in first year of operation)
         if not fiscal_reintegration_applied:
-            fiscal_reintegration = dep * 0.5
+            fiscal_reintegration = dep * 0.5  # 50% of first-year depreciation
             fiscal_reintegration_applied = True
         else:
             fiscal_reintegration = 0.0
         
-        tax, prior_tax_loss = compute_tax(
-            ebitda, dep, si, shi, fiscal_reintegration,
-            tax_rate, prior_tax_loss
-        )
+        # Taxable profit = EBITDA - deductible interest + fiscal reintegration + ATAD addback
+        taxable_profit = max(0, ebitda - deductible_interest + fiscal_reintegration + disallowed_addback)
+        
+        # Apply prior tax losses (FIFO, 5-year cap)
+        taxable_after_loss = max(0, taxable_profit - prior_tax_loss)
+        tax = taxable_after_loss * tax_rate
+        
+        # Update loss carryforward
+        new_loss = max(0, prior_tax_loss - taxable_profit) + max(0, -taxable_after_loss)
+        prior_tax_loss = min(new_loss, ebitda * loss_carryforward_cap)
         
         # Tax paid only in H2 (second half of year) — HR tax law
         is_tax_period = period.period_in_year == 2

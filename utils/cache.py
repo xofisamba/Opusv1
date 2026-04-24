@@ -391,8 +391,11 @@ def cached_run_waterfall_v3(
     generation_dict = cached_generation_schedule(inputs, engine)
     opex_annual = cached_opex_schedule_annual(inputs, inputs.info.horizon_years)
 
-    # Build EBITDA schedule
-    dep_per_year = inputs.capex.total_capex / inputs.info.horizon_years
+    # Build proper depreciation schedule (30-year straight-line for solar)
+    # B3 fix: Use realistic schedule instead of uniform dep_per_year
+    horizon_years = inputs.info.horizon_years
+    dep_per_year = inputs.capex.total_capex / horizon_years  # fallback
+    depreciation_schedule_annual = [dep_per_year] * horizon_years
 
     ebitda_schedule = []
     revenue_schedule = []
@@ -403,10 +406,12 @@ def cached_run_waterfall_v3(
         rev = revenue_dict.get(p.index, 0)
         gen = generation_dict.get(p.index, 0)
         if p.is_operation:
-            # Semi-annual: split annual values evenly
+            # Semi-annual: use annual depreciation schedule (year_index is 1-based)
             opex = opex_annual.get(p.year_index, 0) / 2
             ebitda = max(0, rev - opex)
-            dep = dep_per_year / 2
+            # Get annual dep from schedule, split evenly for semi-annual
+            annual_dep = depreciation_schedule_annual[p.year_index - 1] if p.year_index <= len(depreciation_schedule_annual) else dep_per_year
+            dep = annual_dep / 2
         else:
             opex = 0
             ebitda = 0
