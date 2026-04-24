@@ -182,6 +182,8 @@ class WaterfallPeriodData:
     tax_keur: float
     senior_ds_keur: float
     shl_service_keur: float
+    shl_principal_keur: float
+    shl_interest_keur: float
     distribution_keur: float
     dsra_balance_keur: float
     cash_keur: float
@@ -209,6 +211,8 @@ def flatten_waterfall(periods) -> list[WaterfallPeriodData]:
             tax_keur=getattr(p, 'tax_keur', 0.0),
             senior_ds_keur=getattr(p, 'senior_ds_keur', 0.0),
             shl_service_keur=getattr(p, 'shl_service_keur', 0.0),
+            shl_principal_keur=getattr(p, 'shl_principal_keur', 0.0),
+            shl_interest_keur=getattr(p, 'shl_interest_keur', 0.0),
             distribution_keur=getattr(p, 'distribution_keur', 0.0),
             dsra_balance_keur=getattr(p, 'dsra_balance_keur', 0.0),
             cash_keur=getattr(p, 'cash_balance_keur', 0.0),
@@ -521,14 +525,19 @@ def build_debt_schedule_simple(
     """
     rows = []
     flat = flatten_waterfall(waterfall_periods)
-
+    prev_bs_row = None  # Track previous row for opening balance calculation
+    
     for p in flat:
         if not p.is_operation:
             continue
 
-        opening = p.senior_balance_keur + p.senior_ds_keur  # approximate
+        # Opening balance = previous period's closing balance (not closing + ds)
+        # senior_balance_keur from previous period is the closing balance
+        # We need to track the previous closing balance to compute the correct opening
+        prev_closing = prev_bs_row.closing_balance_keur if prev_bs_row else 0.0
+        opening = prev_closing
         interest = p.interest_senior_keur
-        scheduled_principal = p.senior_ds_keur - interest if p.senior_ds_keur > 0 else 0.0
+        scheduled_principal = p.senior_principal_keur  # actual principal component, not total ds
         cash_sweep = 0.0  # TODO: extract from waterfall
         total_principal = scheduled_principal + cash_sweep
         total_ds = interest + total_principal
@@ -538,7 +547,7 @@ def build_debt_schedule_simple(
         dscr = p.dscr if p.dscr > 0 else float('inf')
         llcr = cfads / closing if closing > 0 else float('inf')
 
-        rows.append(DebtServiceRow(
+        row = DebtServiceRow(
             year=p.year_index,
             period=p.period_in_year,
             opening_balance_keur=opening,
@@ -551,6 +560,8 @@ def build_debt_schedule_simple(
             cfads_keur=cfads,
             dscr=dscr,
             llcr=llcr,
-        ))
+        )
+        rows.append(row)
+        prev_bs_row = row  # Track for next iteration's opening balance
 
     return rows

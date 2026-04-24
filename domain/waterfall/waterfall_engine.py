@@ -492,8 +492,9 @@ def run_waterfall(
         # Cash balance — after sweep
         cash_balance = cash_balance + cf_after_reserves - dist
         
-        # LLCR/PLCR — operation-relative: remaining FCF from current op period
-        remaining_fcf = ebitda_schedule[op_period_counter:]
+        # LLCR/PLCR — remaining FCF from next period onwards (not including current)
+        # Use waterfall index i (not op_period_counter) to correctly index ebitda_schedule
+        remaining_fcf = ebitda_schedule[i + 1:] if i + 1 < len(ebitda_schedule) else []
         # Closing balance: next period's balance, capped at last index
         balance_idx = min(period_in_tenor + 1, len(balance_schedule) - 1) if balance_schedule else 0
         remaining_balance = balance_schedule[balance_idx] if balance_schedule else 0
@@ -616,21 +617,29 @@ def print_waterfall_summary(result: WaterfallResult) -> str:
         f"Total SHL Svce:   {result.total_shl_service_keur:>12,.0f} k€",
         f"Total Distrib:    {result.total_distribution_keur:>12,.0f} k€",
         "-" * 60,
-        f"Sculpting:       {'CONVERGED' if result.sculpting_result.converged else 'FAILED'} ({result.sculpting_result.iterations} iterations)",
-        f"Debt Amount:      {result.sculpting_result.debt_keur:>12,.0f} k€",
-        f"Avg DSCR:         {result.avg_dscr:>12.2f}x",
-        f"Min DSCR:         {result.min_dscr:>12.2f}x",
-        f"Max DSCR:         {result.max_dscr:>12.2f}x",
-        f"Min LLCR:         {result.min_llcr:>12.2f}x",
-        f"Min PLCR:         {result.min_plcr:>12.2f}x",
-        f"Periods in Lockup:{result.periods_in_lockup:>12}",
-        "-" * 60,
-        f"Project IRR:      {result.project_irr * 100:>11.2f}%",
-        f"Equity IRR:       {result.equity_irr * 100:>11.2f}%",
-        f"Project NPV:      {result.project_npv:>12,.0f} k€",
-        f"Equity NPV:       {result.equity_npv:>12,.0f} k€",
-        "=" * 60,
     ]
+    # Sculpting info — appended after list closes
+    converged_str = (
+        f"{'CONVERGED' if result.sculpting_result.converged else 'FAILED'}"
+        f" ({result.sculpting_result.iterations} iterations)"
+        if result.sculpting_result and hasattr(result.sculpting_result, 'converged')
+        else "N/A"
+    )
+    lines.append(f"Sculpting:       {converged_str}")
+    if result.sculpting_result and hasattr(result.sculpting_result, 'debt_keur'):
+        lines.append(f"Debt Amount:      {result.sculpting_result.debt_keur:>12,.0f} k€")
+    lines.append(f"Avg DSCR:         {result.avg_dscr:>12.2f}x")
+    lines.append(f"Min DSCR:         {result.min_dscr:>12.2f}x")
+    lines.append(f"Max DSCR:         {result.max_dscr:>12.2f}x")
+    lines.append(f"Min LLCR:         {result.min_llcr:>12.2f}x")
+    lines.append(f"Min PLCR:         {result.min_plcr:>12.2f}x")
+    lines.append(f"Periods in Lockup:{result.periods_in_lockup:>12}")
+    lines.append("-" * 60)
+    lines.append(f"Project IRR:      {result.project_irr * 100:>11.2f}%")
+    lines.append(f"Equity IRR:       {result.equity_irr * 100:>11.2f}%")
+    lines.append(f"Project NPV:      {result.project_npv:>12,.0f} k€")
+    lines.append(f"Equity NPV:       {result.equity_npv:>12,.0f} k€")
+    lines.append("=" * 60)
     return "\n".join(lines)
 
 # CACHED WRAPPER moved to utils/cache.py (v3 refactoring)
