@@ -23,6 +23,7 @@ from datetime import date
 from domain.financing.sculpting_iterative import (
     iterative_sculpt_debt, IterativeSculptResult,
     closed_form_sculpt, ClosedFormSculptResult,
+    dsra_rolling_target, dsra_update,
 )
 from domain.financing.schedule import senior_debt_amount
 from domain.returns.xirr import xirr, xnpv
@@ -366,14 +367,22 @@ def run_waterfall(
         cf_after_ds = cf_after_tax - senior_ds - shl_svc
         
         # DSRA funding (6 months of debt service)
-        if dsra_months > 0:
-            dsra_target = dsra_months * senior_ds / 6
-            dsra_contrib = max(0, dsra_target - dsra_balance) if cf_after_ds > 0 else 0
+        # DSRA funding — rolling target based on future debt service
+        # dsra_rolling_target() uses future payments (not historical)
+        if dsra_months > 0 and period_in_tenor < tenor_periods:
+            future_payments = payments[period_in_tenor:]  # Remaining payments
+            dsra_target = dsra_rolling_target(future_payments, dsra_months, periods_per_year=2)
+            withdrawal_needed = max(0, -cf_after_ds)  # Only withdraw if CF negative
+            dsra_balance, dsra_contrib, dsra_withdrawal = dsra_update(
+                prior_balance=dsra_balance,
+                target=dsra_target,
+                available_cash=cf_after_ds,
+                withdrawal_needed=withdrawal_needed,
+            )
         else:
             dsra_contrib = 0
-        
-        dsra_balance += dsra_contrib
-        cf_after_reserves = cf_after_ds - dsra_contrib
+            dsra_withdrawal = 0
+        cf_after_reserves = cf_after_ds + dsra_withdrawal - dsra_contrib
         
         # DSCR calculation — industrijski standard: CFADS / Debt Service
         # CFADS = CF after tax, after reserves (cf_after_reserves)
