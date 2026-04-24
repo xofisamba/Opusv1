@@ -2,6 +2,14 @@
 import plotly.graph_objects as go
 from typing import TYPE_CHECKING
 
+from utils.ui_constants import (
+    FINANCIAL_CHART_LAYOUT,
+    KEUR_HOVER,
+    PCT_HOVER,
+    CHART_CONFIG,
+    add_dscr_thresholds,
+)
+
 if TYPE_CHECKING:
     from domain.waterfall.waterfall_engine import WaterfallResult
 
@@ -95,14 +103,13 @@ def create_waterfall_summary_chart(result: "WaterfallResult") -> go.Figure:
     ))
     
     fig.update_layout(
+        **FINANCIAL_CHART_LAYOUT,
         title="Annual Cash Flow Waterfall",
         xaxis_title="Period",
         yaxis_title="kEUR",
         barmode="relative",
-        hovermode="x unified",
-        height=400,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
     )
+    fig.update_layout(config=CHART_CONFIG)
     
     return fig
 
@@ -125,26 +132,27 @@ def create_dscr_chart(result: "WaterfallResult") -> go.Figure:
         mode="lines+markers",
         line=dict(color="#3498db", width=2),
         marker=dict(size=6),
+        hovertemplate=PCT_HOVER,
     ))
-    
+
     # Target DSCR reference line (1.15)
     fig.add_trace(go.Scatter(
         x=periods,
         y=[1.15] * len(periods),
         name="Target (1.15x)",
         mode="lines",
-        line=dict(color="orange", dash="dash", width=1.5),
+        line=dict(color="#F59E0B", dash="dash", width=1.5),
     ))
-    
+
     # Lockup DSCR reference line (1.10)
     fig.add_trace(go.Scatter(
         x=periods,
         y=[1.10] * len(periods),
         name="Lockup (1.10x)",
         mode="lines",
-        line=dict(color="red", dash="dash", width=1.5),
+        line=dict(color="#EF4444", dash="dash", width=1.5),
     ))
-    
+
     # Highlight lockup periods
     lockup_periods = [p.period for p in result.periods if p.lockup_active]
     lockup_dscr = [p.dscr for p in result.periods if p.lockup_active]
@@ -154,17 +162,16 @@ def create_dscr_chart(result: "WaterfallResult") -> go.Figure:
         y=lockup_dscr,
         name="Lockup Active",
         mode="markers",
-        marker=dict(color="red", size=10, symbol="x"),
+        marker=dict(color="#EF4444", size=10, symbol="x"),
     ))
     
     fig.update_layout(
+        **FINANCIAL_CHART_LAYOUT,
         title="DSCR Over Time",
-        xaxis_title="Period",
         yaxis_title="DSCR (x)",
-        hovermode="x unified",
-        height=350,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+        xaxis_title="Period",
     )
+    fig.update_layout(config=CHART_CONFIG)
     
     return fig
 
@@ -194,12 +201,12 @@ def create_debt_balance_chart(result: "WaterfallResult") -> go.Figure:
     ))
     
     fig.update_layout(
+        **FINANCIAL_CHART_LAYOUT,
         title="DSRA Reserve Balance Over Time",
-        xaxis_title="Period",
         yaxis_title="kEUR",
-        hovermode="x unified",
-        height=300,
+        xaxis_title="Period",
     )
+    fig.update_layout(config=CHART_CONFIG)
     
     return fig
 

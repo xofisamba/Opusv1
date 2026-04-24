@@ -31,6 +31,7 @@ from src.ui.charts import (
     create_dscr_chart,
     waterfall_metrics_html,
 )
+from utils.ui_constants import CHART_CONFIG
 from domain.inputs import ProjectInputs
 
 
@@ -1078,7 +1079,7 @@ def main():
         st.subheader("Generation")
         
         # Generation chart
-        st.plotly_chart(create_generation_chart(tech_config, horizon), width="stretch")
+        st.plotly_chart(create_generation_chart(tech_config, horizon), width="stretch", config=CHART_CONFIG)
         
         # Show by year table
         data = []
@@ -1117,7 +1118,7 @@ def main():
             st.metric("Y5 Revenue (P50)", f"{rev_y5:,.0f} kEUR")
         
         # Revenue chart
-        st.plotly_chart(create_revenue_chart(revenue_config, gen_y1, tech_type.split("_")[0]), width="stretch")
+        st.plotly_chart(create_revenue_chart(revenue_config, gen_y1, tech_type.split("_")[0]), width="stretch", config=CHART_CONFIG)
     
     with tab_debt:
         st.subheader("Debt Structure")
@@ -1393,12 +1394,12 @@ def main():
             # Waterfall chart
             st.markdown("### Cash Flow Waterfall")
             wf_chart = create_waterfall_summary_chart(result)
-            st.plotly_chart(wf_chart, width="stretch")
+            st.plotly_chart(wf_chart, width="stretch", config=CHART_CONFIG)
             
             # DSCR chart
             st.markdown("### DSCR Over Time")
             dscr_chart = create_dscr_chart(result)
-            st.plotly_chart(dscr_chart, width="stretch")
+            st.plotly_chart(dscr_chart, width="stretch", config=CHART_CONFIG)
             
         except Exception as e:
             st.error(f"Waterfall calculation failed: {str(e)}")
