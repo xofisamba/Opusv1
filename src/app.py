@@ -1959,7 +1959,6 @@ def main():
         try:
             import plotly.graph_objects as go
             from dataclasses import replace
-            from utils.rate_curve import build_rate_schedule
             
             # Build base case inputs
             inputs = _get_inputs_from_session()
