@@ -355,8 +355,12 @@ def run_waterfall(
             tax_rate, prior_tax_loss
         )
         
+        # Tax paid only in H2 (second half of year) — HR tax law
+        is_tax_period = period.period_in_year == 2
+        tax_this_period = tax if is_tax_period else 0.0
+        
         # CF after tax
-        cf_after_tax = ebitda - tax
+        cf_after_tax = ebitda - tax_this_period
         
         # CF after senior and SHL debt service
         cf_after_ds = cf_after_tax - senior_ds - shl_svc
