@@ -33,6 +33,7 @@ from src.ui.charts import (
     waterfall_metrics_html,
 )
 from utils.ui_constants import CHART_CONFIG
+from utils.financial import format_keur, format_pct, format_multiple
 from domain.inputs import ProjectInputs
 
 
@@ -1376,21 +1377,24 @@ def main():
                     discount_rate_equity=0.0965,
                 )
             
-            # Display metrics
-            st.markdown("### Key Metrics")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Project IRR", f"{result.project_irr*100:.2f}%")
-                st.metric("Equity IRR", f"{result.equity_irr*100:.2f}%")
-            with col2:
-                st.metric("Avg DSCR", f"{result.avg_dscr:.2f}x")
-                st.metric("Min DSCR", f"{result.min_dscr:.2f}x")
-            with col3:
-                st.metric("Total Distribution", f"{result.total_distribution_keur:,.0f} kEUR")
-                st.metric("Lockup Periods", result.periods_in_lockup)
-            with col4:
-                st.metric("Total Senior DS", f"{result.total_senior_ds_keur:,.0f} kEUR")
-                st.metric("Total Tax", f"{result.total_tax_keur:,.0f} kEUR")
+            # KPI Strip — uvijek na vrhu, bez expandera
+            st.markdown("##### 📊 Key Metrics")
+            kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
+            with kpi_col1:
+                st.metric("Project IRR", format_pct(result.project_irr))
+                st.metric("Equity IRR", format_pct(result.equity_irr))
+            with kpi_col2:
+                st.metric("Avg DSCR", format_multiple(result.avg_dscr))
+                st.metric("Min DSCR", format_multiple(result.min_dscr))
+            with kpi_col3:
+                st.metric("Total Distribution", format_keur(result.total_distribution_keur))
+                st.metric("Lockup Periods", str(result.periods_in_lockup))
+            with kpi_col4:
+                st.metric("Total Senior DS", format_keur(result.total_senior_ds_keur))
+                st.metric("Total Tax", format_keur(result.total_tax_keur))
+            with kpi_col5:
+                st.metric("NPV (kEUR)", format_keur(int(result.project_npv)))
+                st.metric("Periods", str(len([p for p in result.periods if p.is_operation])))
             
             # Waterfall chart
             st.markdown("### Cash Flow Waterfall")
