@@ -16,7 +16,6 @@ Handles:
 - SHL (subordinated hybrid loan)
 - Cash sweep to senior debt
 """
-import streamlit as st
 from dataclasses import dataclass, field
 from typing import Optional
 from datetime import date
@@ -523,14 +522,8 @@ def print_waterfall_summary(result: WaterfallResult) -> str:
     ]
     return "\n".join(lines)
 
-# =============================================================================
-# CACHED WRAPPER (Sprint 2)
-# =============================================================================
-
-@st.cache_data(
-    show_spinner="⚙️ Računam waterfall...",
-    hash_funcs={"domain.period_engine.PeriodEngine": hash_engine_for_cache}
-)
+# CACHED WRAPPER moved to utils/cache.py (v3 refactoring)
+# See utils/cache.py:cached_run_waterfall_v3()
 def cached_run_waterfall(
     inputs: "ProjectInputs",
     engine: "PeriodEngine",

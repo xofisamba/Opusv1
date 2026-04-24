@@ -332,3 +332,107 @@ def cached_model_state(
     """
     from domain.model_state import build_model_state
     return build_model_state(inputs, engine)
+
+
+# =============================================================================
+# CACHED WATERFALL (v3 refactoring — moved from domain/waterfall/)
+# =============================================================================
+
+@st.cache_data(
+    show_spinner="⚙️ Računam waterfall...",
+    hash_funcs={
+        ProjectInputs: hash_inputs_for_cache,
+        PeriodEngine: hash_engine_for_cache,
+    }
+)
+def cached_run_waterfall_v3(
+    inputs: ProjectInputs,
+    engine: PeriodEngine,
+    rate_per_period: float,
+    tenor_periods: int,
+    target_dscr: float = 1.15,
+    lockup_dscr: float = 1.10,
+    tax_rate: float = 0.10,
+    dsra_months: int = 6,
+    shl_amount: float = 0.0,
+    shl_rate: float = 0.0,
+    discount_rate_project: float = 0.0641,
+    discount_rate_equity: float = 0.0965,
+) -> "WaterfallResult":
+    """Cached waterfall computation with proper hash_funcs.
+
+    This is the v3 version — uses cached schedules from utils/cache.py
+    and proper hash_funcs for both ProjectInputs and PeriodEngine.
+
+    Args:
+        inputs: ProjectInputs instance
+        engine: PeriodEngine instance
+        rate_per_period: Interest rate per period (e.g., 0.0565/2 for semi-annual)
+        tenor_periods: Senior debt tenor in periods
+        target_dscr: Target DSCR for sculpting
+        lockup_dscr: Lockup DSCR threshold
+        tax_rate: Corporate tax rate
+        dsra_months: DSRA reserve months
+        shl_amount: Subordinated hybrid loan amount
+        shl_rate: SHL interest rate
+        discount_rate_project: Discount rate for project NPV
+        discount_rate_equity: Discount rate for equity NPV
+
+    Returns:
+        WaterfallResult with all computed periods and metrics
+    """
+    from domain.waterfall.waterfall_engine import run_waterfall
+    from domain.revenue.generation import full_revenue_schedule, full_generation_schedule
+    from domain.opex.projections import opex_schedule_annual
+
+    # Use cached schedules
+    periods_list = list(engine.periods())
+    revenue_dict = cached_revenue_schedule(inputs, engine)
+    generation_dict = cached_generation_schedule(inputs, engine)
+    opex_annual = cached_opex_schedule_annual(inputs, inputs.info.horizon_years)
+
+    # Build EBITDA schedule
+    dep_per_year = inputs.capex.total_capex / inputs.info.horizon_years
+
+    ebitda_schedule = []
+    revenue_schedule = []
+    generation_schedule = []
+    depreciation_schedule = []
+
+    for p in periods_list:
+        rev = revenue_dict.get(p.index, 0)
+        gen = generation_dict.get(p.index, 0)
+        if p.is_operation:
+            # Semi-annual: split annual values evenly
+            opex = opex_annual.get(p.year_index, 0) / 2
+            ebitda = max(0, rev - opex)
+            dep = dep_per_year / 2
+        else:
+            opex = 0
+            ebitda = 0
+            dep = 0
+
+        revenue_schedule.append(rev)
+        generation_schedule.append(gen)
+        ebitda_schedule.append(ebitda)
+        depreciation_schedule.append(dep)
+
+    return run_waterfall(
+        ebitda_schedule=ebitda_schedule,
+        revenue_schedule=revenue_schedule,
+        generation_schedule=generation_schedule,
+        depreciation_schedule=depreciation_schedule,
+        periods=periods_list,
+        total_capex=inputs.capex.total_capex,
+        rate_per_period=rate_per_period,
+        tenor_periods=tenor_periods,
+        target_dscr=target_dscr,
+        lockup_dscr=lockup_dscr,
+        tax_rate=tax_rate,
+        dsra_months=dsra_months,
+        shl_amount=shl_amount,
+        shl_rate=shl_rate,
+        discount_rate_project=discount_rate_project,
+        discount_rate_equity=discount_rate_equity,
+        financial_close=inputs.info.financial_close,
+    )

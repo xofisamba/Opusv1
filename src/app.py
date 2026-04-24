@@ -23,7 +23,8 @@ from domain.models import (
     SolarCapexBreakdown, WindCapexBreakdown, BESSCapexBreakdown,
     SolarOpexParams, WindOpexParams, BESSOpexParams,
 )
-from domain.waterfall.waterfall_engine import cached_run_waterfall
+from domain.waterfall.waterfall_engine import cached_run_waterfall  # legacy
+from utils.cache import cached_run_waterfall_v3  # v3: proper hash_funcs
 from domain.period_engine import PeriodEngine, PeriodFrequency as PF
 from domain.inputs import ProjectInputs, PeriodFrequency
 from src.ui.charts import (
@@ -1166,7 +1167,7 @@ def main():
             tenor_periods = debt_config.senior.tenor_years * 2
             
             with st.spinner("Calculating P&L..."):
-                result = cached_run_waterfall(
+                result = cached_run_waterfall_v3(
                     inputs=inputs, engine=engine,
                     rate_per_period=rate, tenor_periods=tenor_periods,
                     target_dscr=debt_config.senior.target_dscr,
@@ -1225,7 +1226,7 @@ def main():
             tenor_periods = debt_config.senior.tenor_years * 2
             
             with st.spinner("Calculating Balance Sheet..."):
-                result = cached_run_waterfall(
+                result = cached_run_waterfall_v3(
                     inputs=inputs, engine=engine,
                     rate_per_period=rate, tenor_periods=tenor_periods,
                     target_dscr=debt_config.senior.target_dscr,
@@ -1296,7 +1297,7 @@ def main():
             tenor_periods = debt_config.senior.tenor_years * 2
             
             with st.spinner("Calculating Cash Flow..."):
-                result = cached_run_waterfall(
+                result = cached_run_waterfall_v3(
                     inputs=inputs, engine=engine,
                     rate_per_period=rate, tenor_periods=tenor_periods,
                     target_dscr=debt_config.senior.target_dscr,
@@ -1360,7 +1361,7 @@ def main():
             tenor_periods = debt_config.senior.tenor_years * 2
             
             with st.spinner("Calculating waterfall..."):
-                result = cached_run_waterfall(
+                result = cached_run_waterfall_v3(
                     inputs=inputs,
                     engine=engine,
                     rate_per_period=rate,
