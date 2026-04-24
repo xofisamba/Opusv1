@@ -768,13 +768,13 @@ def render_debt_config() -> DebtConfig:
             help="FLAT = constant all-in rate (hedge-equivalent). EURIBOR = floating curve.",
         )
         if base_rate_type == "FLAT":
-            all_in_rate = (debt_config.senior.base_rate + debt_config.senior.margin_bps / 10000) * 100
-            st.caption(f"FLAT — {all_in_rate:.2f}% all-in (hedge-equivalent, no curve)")
+            # debt_config not yet created, use placeholder
+            st.caption("FLAT — constant all-in rate (hedge-equivalent, no curve)")
         else:
             st.caption(f"{base_rate_type} — EURIBOR {base_rate_type.replace('EURIBOR_', '')} curve + margin")
         base_rate = st.number_input(
             "Base Rate (%)",
-            0.0, 15.0, debt_config.senior.base_rate * 100, step=0.1
+            0.0, 15.0, 5.65, step=0.1
         ) / 100
         margin = st.number_input(
             "Margin (bps)",
