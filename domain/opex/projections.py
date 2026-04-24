@@ -7,11 +7,12 @@ Each item has:
 - Step changes at specific years (e.g., Infrastructure Maintenance Y3: 185.64)
 
 Total Y1 OPEX for Oborovo: 1,353.91 kEUR
+
+NOTE: This module contains PURE functions only. 
+Caching is handled in utils/cache.py at the app layer.
 """
-import streamlit as st
 from typing import Sequence
 from domain.inputs import OpexItem, ProjectInputs
-from domain.period_engine import PeriodEngine, PeriodMeta, hash_engine_for_cache
 
 
 def opex_year(
@@ -30,7 +31,6 @@ def opex_year(
     return sum(item.amount_at_year(year_index) for item in items)
 
 
-@st.cache_data(show_spinner=False)
 def opex_schedule_annual(
     inputs: ProjectInputs,
     horizon_years: int = 30,
@@ -89,10 +89,9 @@ def opex_per_mwh_y1(
     return (opex_y1 * 1000) / generation_y1_mwh
 
 
-@st.cache_data(show_spinner=False, hash_funcs={PeriodEngine: hash_engine_for_cache})
 def opex_schedule_period(
     inputs: ProjectInputs,
-    engine: PeriodEngine,
+    engine,
 ) -> dict[int, float]:
     """Generate semi-annual period OPEX schedule.
     
@@ -102,27 +101,26 @@ def opex_schedule_period(
     
     Args:
         inputs: Project inputs
-        engine: Period engine
+        engine: PeriodEngine instance
     
     Returns:
         Dict mapping period_index → OPEX in kEUR
     """
     schedule = {}
+    
+    # Get annual schedule
     annual_schedule = opex_schedule_annual(inputs, inputs.info.horizon_years)
     
-    for period in engine.periods():
-        if not period.is_operation:
-            schedule[period.index] = 0.0
-            continue
-        
-        # Annual OPEX for this year
-        annual_opex = annual_schedule.get(period.year_index, 0.0)
-        
-        # Split semi-annually (50/50 for simplicity)
-        schedule[period.index] = annual_opex * 0.5
+    # Map to periods based on engine
+    for p in engine.periods():
+        if p.is_operation:
+            # Annual / 2 for semi-annual
+            annual_opex = annual_schedule.get(p.year_index, 0.0)
+            schedule[p.index] = annual_opex / 2
+        else:
+            schedule[p.index] = 0.0
     
     return schedule
-
 
 def opex_breakdown_year(
     inputs: ProjectInputs,
@@ -156,15 +154,11 @@ def total_opex_over_horizon(
         Total OPEX in kEUR (undiscounted or discounted)
     """
     total = 0.0
-    
     for year in range(1, horizon_years + 1):
-        annual_opex = opex_year(inputs.opex, year)
-        
+        amount = opex_year(inputs.opex, year)
         if discount_rate > 0:
-            annual_opex /= (1 + discount_rate) ** year
-        
-        total += annual_opex
-    
+            amount = amount / ((1 + discount_rate) ** year)
+        total += amount
     return total
 
 

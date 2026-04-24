@@ -10,11 +10,13 @@ Where:
 - G20: operating hours for yield scenario
 - G19: curtailment assumption
 - Degradation: annual degradation factor
+
+NOTE: This module contains PURE functions only.
+Caching is handled in utils/cache.py at the app layer.
 """
-import streamlit as st
-from typing import Sequence
+from typing import Sequence, Optional
 from domain.inputs import TechnicalParams, ProjectInputs
-from domain.period_engine import PeriodEngine, PeriodMeta, hash_engine_for_cache
+from domain.period_engine import PeriodEngine, PeriodMeta
 
 
 def period_generation(
@@ -103,7 +105,7 @@ def period_revenue(
     tech: TechnicalParams,
     period: PeriodMeta,
     ppa_tariff_eur_mwh: float,
-    market_price_eur_mwh: float | None = None,
+    market_price_eur_mwh: Optional[float] = None,
     ppa_active: bool = True,
 ) -> float:
     """Calculate revenue for a single period.
@@ -147,7 +149,6 @@ def period_revenue(
     return revenue_keur
 
 
-@st.cache_data(show_spinner=False, hash_funcs={PeriodEngine: hash_engine_for_cache})
 def full_generation_schedule(
     inputs: ProjectInputs,
     engine: PeriodEngine,
@@ -191,7 +192,6 @@ def full_generation_schedule(
     return schedule
 
 
-@st.cache_data(show_spinner=False, hash_funcs={PeriodEngine: hash_engine_for_cache})
 def full_revenue_schedule(
     inputs: ProjectInputs,
     engine: PeriodEngine,

@@ -180,7 +180,8 @@ class OpexItem:
             if year == step_year:
                 return amount
         # Apply escalation from Y1
-        return self.y1_amount_keur * (1 + self.annual_inflation) ** (year - 1)
+        result = self.y1_amount_keur * (1 + self.annual_inflation) ** (year - 1)
+        return max(0.0, result)  # Guard against negative OPEX from negative inflation
 
 
 @dataclass(frozen=True)
@@ -506,3 +507,29 @@ class ProjectInputs:
             financing=financing,
             tax=tax,
         )
+
+# =============================================================================
+# Cache utilities (for @st.cache_data hash_funcs)
+# =============================================================================
+
+def hash_inputs_for_cache(inputs: "ProjectInputs") -> tuple:
+    """Deterministic hash for frozen ProjectInputs.
+    
+    Used for @st.cache_data hash_funcs parameter.
+    
+    Args:
+        inputs: ProjectInputs instance (must be frozen)
+    
+    Returns:
+        Tuple of values for hashing
+    """
+    return (
+        inputs.info.financial_close,
+        inputs.technical.capacity_mw,
+        inputs.financing.gearing_ratio,
+        inputs.financing.all_in_rate,
+        inputs.revenue.ppa_base_tariff,
+        inputs.revenue.ppa_term_years,
+        inputs.capex.total_capex,
+        inputs.tax.corporate_rate,
+    )

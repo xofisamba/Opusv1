@@ -366,7 +366,7 @@ def run_waterfall(
         
         # DSCR calculation — industrijski standard: CFADS / Debt Service
         # CFADS = CF after tax, after reserves (cf_after_reserves)
-        dscr = cf_after_reserves / senior_ds if senior_ds > 0 else 0
+        dscr = cf_after_reserves / senior_ds if senior_ds > 0 else float('inf')
         all_dsrs.append(dscr)
         
         # Lockup check

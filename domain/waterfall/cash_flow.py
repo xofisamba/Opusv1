@@ -8,6 +8,7 @@ This module brings together:
 - Reserve accounts
 - Distribution (after lockup check)
 """
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -201,7 +202,10 @@ def summary_metrics(
     if not waterfall_results:
         return {}
     
-    dscr_values = [r.dscr for r in waterfall_results if r.dscr > 0 and r.dscr < 100]
+    dscr_values = [
+        r.dscr for r in waterfall_results
+        if r.senior_ds_keur > 0 and not math.isinf(r.dscr) and r.dscr > 0
+    ]
     
     total_dist = sum(r.distribution_keur for r in waterfall_results)
     total_revenue = sum(r.revenue_keur for r in waterfall_results)

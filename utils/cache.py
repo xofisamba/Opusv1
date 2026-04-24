@@ -239,3 +239,96 @@ def compute_waterfall_cached(
 def invalidate_waterfall_cache() -> None:
     """Invalidate waterfall cache. Call when inputs change."""
     get_waterfall_cache().clear()
+
+# =============================================================================
+# NEW: Domain layer cached functions (v3 refactoring)
+# These provide @st.cache_data wrappers for domain functions
+# =============================================================================
+
+from domain.period_engine import PeriodEngine, hash_engine_for_cache
+from domain.inputs import ProjectInputs, hash_inputs_for_cache
+
+
+@st.cache_data(show_spinner=False, hash_funcs={
+    ProjectInputs: hash_inputs_for_cache,
+    PeriodEngine: hash_engine_for_cache,
+})
+def cached_generation_schedule(
+    inputs: ProjectInputs,
+    engine: PeriodEngine,
+    yield_scenario: str = "P50",
+):
+    """Cached generation schedule.
+    
+    Args:
+        inputs: Project inputs
+        engine: Period engine
+        yield_scenario: "P50" or "P90-10y"
+    
+    Returns:
+        Dict mapping period_index → generation_MWh
+    """
+    from domain.revenue.generation import full_generation_schedule
+    return full_generation_schedule(inputs, engine, yield_scenario)
+
+
+@st.cache_data(show_spinner=False, hash_funcs={
+    ProjectInputs: hash_inputs_for_cache,
+    PeriodEngine: hash_engine_for_cache,
+})
+def cached_revenue_schedule(
+    inputs: ProjectInputs,
+    engine: PeriodEngine,
+):
+    """Cached revenue schedule.
+    
+    Args:
+        inputs: Project inputs
+        engine: Period engine
+    
+    Returns:
+        Dict mapping period_index → revenue_kEUR
+    """
+    from domain.revenue.generation import full_revenue_schedule
+    return full_revenue_schedule(inputs, engine)
+
+
+@st.cache_data(show_spinner=False, hash_funcs={
+    ProjectInputs: hash_inputs_for_cache,
+})
+def cached_opex_schedule_annual(
+    inputs: ProjectInputs,
+    horizon_years: int = 30,
+):
+    """Cached annual OPEX schedule.
+    
+    Args:
+        inputs: Project inputs
+        horizon_years: Number of years to project
+    
+    Returns:
+        Dict mapping year_index → OPEX in kEUR
+    """
+    from domain.opex.projections import opex_schedule_annual
+    return opex_schedule_annual(inputs, horizon_years)
+
+
+@st.cache_data(show_spinner=False, hash_funcs={
+    ProjectInputs: hash_inputs_for_cache,
+    PeriodEngine: hash_engine_for_cache,
+})
+def cached_model_state(
+    inputs: ProjectInputs,
+    engine: PeriodEngine,
+):
+    """Cached model state with all precomputed schedules.
+    
+    Args:
+        inputs: Project inputs
+        engine: Period engine
+    
+    Returns:
+        ModelState with all schedules
+    """
+    from domain.model_state import build_model_state
+    return build_model_state(inputs, engine)
