@@ -1986,6 +1986,7 @@ def main():
             ]
             
             tornado_data = []
+            spider_data = {}  # {var_name: {"values": [...], "irr": [...]}}
             progress_bar = st.progress(0, text="Running sensitivity analysis...")
             total_steps = sum(v["steps"] for v in sensitivity_vars)
             completed = 0
@@ -2096,6 +2097,13 @@ def main():
                     "base_value": var["base_mult"],
                     "unit": var["unit"],
                 })
+                
+                # Store spider data
+                spider_data[var_name] = {
+                    "values": var_values,
+                    "irr": irr_values,
+                    "unit": var["unit"],
+                }
             
             progress_bar.empty()
             
@@ -2144,6 +2152,174 @@ def main():
             st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
             
             st.caption(f"Sensitivity analysis complete. Base case: {base_irr*100:.3f}% IRR, {base_dscr:.3f}x Avg DSCR.")
+            
+            # =================================================================
+            # SPIDER TABLE — all IRR values for each variable
+            # =================================================================
+            st.markdown("##### 🕷️ Spider Table — IRR by Variable")
+            
+            if spider_data:
+                spider_rows = []
+                for var_name, data in spider_data.items():
+                    row = {"Variable": var_name}
+                    for i, (val, irr) in enumerate(zip(data["values"], data["irr"])):
+                        unit_suffix = data["unit"] if i > 0 else ""
+                        col_name = f"{val:.2f}{unit_suffix}"
+                        row[col_name] = f"{irr*100:.2f}%"
+                    spider_rows.append(row)
+                
+                if spider_rows:
+                    df_spider = pd.DataFrame(spider_rows)
+                    st.dataframe(df_spider, use_container_width=True, hide_index=True)
+                    st.caption("Spider table: IRR at each step of the sensitivity range. Base case highlighted.")
+            else:
+                st.info("Spider data not available.")
+            
+            # =================================================================
+            # TWO-WAY SENSITIVITY — heatmap matrix
+            # =================================================================
+            st.markdown("##### 🔲 Two-Way Sensitivity — IRR Matrix")
+            
+            # Let user select 2 variables for 2-way analysis
+            col_tw1, col_tw2 = st.columns(2)
+            with col_tw1:
+                tw_var1 = st.selectbox(
+                    "Variable 1 (rows)",
+                    ["PPA Tariff", "Generation", "Interest Rate", "CAPEX"],
+                    index=0,
+                    key="tw_var1",
+                )
+            with col_tw2:
+                tw_var2 = st.selectbox(
+                    "Variable 2 (columns)",
+                    ["PPA Tariff", "Generation", "Interest Rate", "CAPEX"],
+                    index=1,
+                    key="tw_var2",
+                )
+            
+            if st.button("Run Two-Way Sensitivity", key="run_two_way"):
+                with st.spinner(f"Running two-way analysis: {tw_var1} vs {tw_var2}..."):
+                    
+                    # Define ranges for each variable
+                    var_ranges = {
+                        "PPA Tariff": {"base": 1.0, "min": 0.75, "max": 1.30, "steps": 5, "unit": "x"},
+                        "Generation": {"base": 1.0, "min": 0.80, "max": 1.20, "steps": 5, "unit": "x"},
+                        "Interest Rate": {"base": 0, "min": -150, "max": 150, "steps": 5, "unit": "bps"},
+                        "CAPEX": {"base": 1.0, "min": 0.85, "max": 1.20, "steps": 5, "unit": "x"},
+                    }
+                    
+                    r1 = var_ranges[tw_var1]
+                    r2 = var_ranges[tw_var2]
+                    
+                    # Build value grids
+                    vals1 = [r1["min"] + i * (r1["max"] - r1["min"]) / (r1["steps"] - 1) for i in range(r1["steps"])]
+                    vals2 = [r2["min"] + i * (r2["max"] - r2["min"]) / (r2["steps"] - 1) for i in range(r2["steps"])]
+                    
+                    # Compute matrix
+                    matrix = []
+                    for v1 in vals1:
+                        row = []
+                        for v2 in vals2:
+                            try:
+                                # Build modified inputs
+                                inputs_v1 = inputs
+                                inputs_v2 = inputs
+                                
+                                if tw_var1 == "PPA Tariff":
+                                    base_t = inputs.revenue.ppa_base_price_eur_mwh
+                                    inputs_v1 = replace(inputs, revenue=replace(inputs.revenue, ppa_base_price_eur_mwh=base_t * v1))
+                                elif tw_var1 == "Generation":
+                                    base_g = inputs.generation.wind_capacity_factor
+                                    inputs_v1 = replace(inputs, generation=replace(inputs.generation, wind_capacity_factor=base_g * v1))
+                                elif tw_var1 == "CAPEX":
+                                    base_c = inputs.capex.total_capex
+                                    inputs_v1 = replace(inputs, capex=replace(inputs.capex, total_capex_keur=base_c * v1))
+                                # Rate handled separately below
+                                
+                                if tw_var2 == "PPA Tariff":
+                                    base_t = inputs.revenue.ppa_base_price_eur_mwh
+                                    inputs_v2 = replace(inputs_v1, revenue=replace(inputs_v1.revenue, ppa_base_price_eur_mwh=base_t * v2))
+                                elif tw_var2 == "Generation":
+                                    base_g = inputs.generation.wind_capacity_factor
+                                    inputs_v2 = replace(inputs_v1, generation=replace(inputs_v1.generation, wind_capacity_factor=base_g * v2))
+                                elif tw_var2 == "CAPEX":
+                                    base_c = inputs.capex.total_capex
+                                    inputs_v2 = replace(inputs_v1, capex=replace(inputs_v1.capex, total_capex_keur=base_c * v2))
+                                
+                                # Handle rate for both variables
+                                base_rate_val = debt_config.senior.all_in_rate
+                                rate1 = v1 if tw_var1 == "Interest Rate" else (0 if tw_var2 != "Interest Rate" else v2)
+                                rate2 = v2 if tw_var2 == "Interest Rate" else (0 if tw_var1 != "Interest Rate" else v1)
+                                
+                                total_bps = int(rate1 + rate2)
+                                new_margin = max(0, debt_config.senior.margin_bps + total_bps)
+                                rate_sched_tw = build_rate_schedule(
+                                    base_rate_type="FLAT",
+                                    tenor_periods=tenor_periods, periods_per_year=2,
+                                    base_rate_override=base_rate_val / 2,
+                                    floating_share=debt_config.senior.floating_share,
+                                    fixed_share=debt_config.senior.fixed_share,
+                                    hedge_coverage=debt_config.senior.hedged_share,
+                                    margin_bps=new_margin,
+                                    base_rate_floor=debt_config.senior.base_rate_floor,
+                                )
+                                
+                                result = cached_run_waterfall_v3(
+                                    inputs=inputs_v2, engine=engine,
+                                    rate_per_period=rate, tenor_periods=tenor_periods,
+                                    target_dscr=debt_config.senior.target_dscr,
+                                    lockup_dscr=debt_config.senior.min_dscr_lockup,
+                                    tax_rate=tax_config.corporate_tax_rate,
+                                    dsra_months=debt_config.senior.dsra_months,
+                                    shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
+                                    shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
+                                    discount_rate_project=0.0641,
+                                    discount_rate_equity=0.0965,
+                                    rate_schedule=rate_sched_tw,
+                                )
+                                row.append(result.project_irr * 100)
+                            except Exception as e:
+                                row.append(None)
+                        matrix.append(row)
+                    
+                    # Render heatmap
+                    import plotly.express as px
+                    
+                    # Format labels
+                    labels1 = [f"{v1:.2f}" for v1 in vals1]
+                    labels2 = [f"{v2:.0f}" if tw_var2 == "Interest Rate" else f"{v2:.2f}" for v2 in vals2]
+                    
+                    # Create annotations
+                    annotations = []
+                    for i, row_vals in enumerate(matrix):
+                        for j, val in enumerate(row_vals):
+                            if val is not None:
+                                annotations.append(
+                                    dict(x=j, y=i, text=f"{val:.2f}%",
+                                         showarrow=False, font=dict(color="white" if 7.5 < val < 10 else "black"))
+                                )
+                    
+                    fig_tw = go.Figure(data=go.Heatmap(
+                        z=matrix,
+                        x=labels2,
+                        y=labels1,
+                        colorscale="RdYlGn",
+                        reversescale=False,
+                        text=[[f"{v:.2f}%" if v else "N/A" for v in row] for row in matrix],
+                        showscale=True,
+                        colorbar=dict(title="IRR (%)"),
+                    ))
+                    fig_tw.update_layout(
+                        title={"text": f"Project IRR: {tw_var1} (rows) vs {tw_var2} (cols)", "font": {"size": 14}},
+                        xaxis_title=tw_var2,
+                        yaxis_title=tw_var1,
+                        height=400,
+                        annotations=annotations,
+                    )
+                    st.plotly_chart(fig_tw, config=CHART_CONFIG)
+                    
+                    # Show base case values
+                    st.caption(f"Base case: {tw_var1}=1.0, {tw_var2}=0 bps → IRR={base_irr*100:.2f}%")
             
         except Exception as e:
             st.error(f"Sensitivity analysis failed: {str(e)}")
