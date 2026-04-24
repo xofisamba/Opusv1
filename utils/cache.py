@@ -440,4 +440,5 @@ def cached_run_waterfall_v3(
         discount_rate_project=discount_rate_project,
         discount_rate_equity=discount_rate_equity,
         financial_close=inputs.info.financial_close,
+        gearing_ratio=inputs.financing.gearing_ratio,
     )

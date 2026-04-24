@@ -205,6 +205,7 @@ def run_waterfall(
     discount_rate_project: float = 0.0641,
     discount_rate_equity: float = 0.0965,
     financial_close: 'date' = None,
+    gearing_ratio: float = 0.80,  # Used for sizing cap in closed_form_sculpt
 ) -> WaterfallResult:
     """Run full waterfall with iterative debt sculpting.
     
@@ -239,7 +240,7 @@ def run_waterfall(
         rate_schedule=rate_schedule,
         tenor_periods=tenor_periods,
         target_dscr=target_dscr,
-        gearing_cap_keur=total_capex * 0.80,  # 80% gearing cap
+        gearing_cap_keur=total_capex * gearing_ratio,  # P90 sizing: min(gearing-based, DSCR-based)
     )
     
     debt = sculpt_result.debt_keur
@@ -418,7 +419,24 @@ def run_waterfall(
         
         cum_distribution += dist
         
-        # Cash balance
+        # Cash sweep — excess CFADS goes to early debt repayment (bank standard)
+        # Activated when DSCR > 1.35
+        sweep_dscr_threshold = 1.35
+        remaining_debt_balance = balance_schedule[period_in_tenor] if period_in_tenor < len(balance_schedule) else 0
+        if remaining_debt_balance > 0 and dscr > sweep_dscr_threshold:
+            dist_after_sweep, sweep_amount = cash_sweep(
+                cf_after_reserves=cf_after_reserves,
+                senior_debt_balance=remaining_debt_balance,
+                sweep_dscr=sweep_dscr_threshold,
+                actual_dscr=dscr,
+                sweep_pct=1.0,  # 100% sweep
+            )
+            dist = dist_after_sweep
+            cum_distribution += dist  # Update cum after sweep
+        else:
+            sweep_amount = 0.0
+        
+        # Cash balance — after sweep
         cash_balance = cash_balance + cf_after_reserves - dist
         
         # LLCR/PLCR — operation-relative: remaining FCF from current op period
@@ -460,7 +478,7 @@ def run_waterfall(
             plcr=plcr_val,
             lockup_active=lockup,
             distribution_keur=dist,
-            cash_sweep_keur=0,
+            cash_sweep_keur=sweep_amount,
             cum_distribution_keur=cum_distribution,
             cash_balance_keur=cash_balance,
         )
