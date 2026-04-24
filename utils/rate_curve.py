@@ -90,7 +90,9 @@ def build_euribor_curve(
     """Build Euribor rate curve.
     
     Args:
-        base_rate_type: "EURIBOR_3M" or "EURIBOR_6M"
+        base_rate_type: "FLAT" | "EURIBOR_1M" | "EURIBOR_3M" | "EURIBOR_6M"
+            "FLAT" = constant all-in rate (hedge-equivalent, no EURIBOR exposure)
+            "EURIBOR_*" = use EURIBOR curve (floating exposure with margin)
         spot_rate: Override spot rate. None = use current reference.
         forwards: Override forward rates. None = use built-in curve.
         flat_bps: Flat spread to add to all rates (in bps).
@@ -98,18 +100,20 @@ def build_euribor_curve(
     Returns:
         List of RateCurvePoint (tenor_months, rate) ordered by tenor.
     """
-    if base_rate_type == "EURIBOR_1M":
+    if base_rate_type == "EURIBOR_1M" or base_rate_type == "1M":
         forward_tenors = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 18)
         curve = forwards or EURIBOR_1M_FORWARDS
         spot = spot_rate if spot_rate is not None else EURIBOR_1M_SPOT
-    elif base_rate_type == "EURIBOR_3M":
+    elif base_rate_type == "EURIBOR_3M" or base_rate_type == "3M":
         forward_tenors = (3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 42, 48, 54)
         curve = forwards or EURIBOR_3M_FORWARDS
         spot = spot_rate if spot_rate is not None else EURIBOR_3M_SPOT
-    else:  # EURIBOR_6M
+    elif base_rate_type == "EURIBOR_6M" or base_rate_type == "6M":
         forward_tenors = (6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 84, 96, 108)
         curve = forwards or EURIBOR_6M_FORWARDS
         spot = spot_rate if spot_rate is not None else EURIBOR_6M_SPOT
+    else:
+        raise ValueError(f"Unknown base_rate_type: {base_rate_type}. Use FLAT, EURIBOR_1M, EURIBOR_3M, EURIBOR_6M, or fixed.")
     
     flat_spread = flat_bps / 10000.0
     result = [RateCurvePoint(tenor_months=0, rate=spot + flat_spread)]
@@ -173,7 +177,9 @@ def build_rate_schedule(
     Computes blended floating+fixed+hedge rate per period.
     
     Args:
-        base_rate_type: "EURIBOR_3M" or "EURIBOR_6M"
+        base_rate_type: "FLAT" | "EURIBOR_1M" | "EURIBOR_3M" | "EURIBOR_6M"
+            "FLAT" = constant all-in rate (hedge-equivalent, no EURIBOR exposure)
+            "EURIBOR_*" = use EURIBOR curve (floating exposure with margin)
         tenor_periods: Total number of rate periods (semi-annual)
         periods_per_year: 2 for semi-annual, 1 for annual
         base_rate_override: Override the base rate (for sensitivity)
@@ -187,6 +193,18 @@ def build_rate_schedule(
     Returns:
         List of semi-annual rates, one per period.
     """
+    # For FLAT mode: return constant rate (all-in rate, hedge-equivalent)
+    # base_rate_override should be the per-period all-in rate (e.g., 0.0565/2 = 0.02825)
+    if base_rate_type == "FLAT":
+        all_in = (base_rate_override if base_rate_override is not None else 0.0565 / 2)
+        return [all_in] * tenor_periods
+    
+    # For fixed rate mode: override with fixed rate as EURIBOR component
+    if base_rate_type == "fixed" and base_rate_override is not None:
+        # Treat fixed rate as EURIBOR component (EURIBOR_6M curve will be used)
+        # The 'fixed' type just signals the UI to show fixed rate option
+        pass  # Falls through to EURIBOR curve
+    
     curve = build_euribor_curve(
         base_rate_type=base_rate_type,
         forwards=forwards,

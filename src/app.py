@@ -715,19 +715,20 @@ def render_debt_config() -> DebtConfig:
     
     with col2:
         base_rate_type = st.selectbox(
-            "Base Rate Type",
-            ["EURIBOR_6M", "EURIBOR_3M", "FIXED"],
+            "Rate Mode",
+            ["FLAT", "EURIBOR_1M", "EURIBOR_3M", "EURIBOR_6M"],
             index=0,
-            help="Euribor type for floating debt pricing",
+            help="FLAT = constant all-in rate (hedge-equivalent). EURIBOR = floating curve.",
         )
+        if base_rate_type == "FLAT":
+            all_in_rate = (debt_config.senior.base_rate + debt_config.senior.margin_bps / 10000) * 100
+            st.caption(f"FLAT — {all_in_rate:.2f}% all-in (hedge-equivalent, no curve)")
+        else:
+            st.caption(f"{base_rate_type} — EURIBOR {base_rate_type.replace('EURIBOR_', '')} curve + margin")
         base_rate = st.number_input(
             "Base Rate (%)",
-            0.0, 15.0, 3.0, step=0.1
+            0.0, 15.0, debt_config.senior.base_rate * 100, step=0.1
         ) / 100
-        if base_rate_type == "FIXED":
-            st.caption("Fixed rate — Euribor curve not used")
-        else:
-            st.caption(f"{base_rate_type} — will use curve for forward rates")
         margin = st.number_input(
             "Margin (bps)",
             0, 1000, 265, step=5

@@ -32,9 +32,10 @@ class SeniorDebtParams:
     senior_debt_keur: float = 0.0  # Absolute amount (computed from gearing × CAPEX)
     
     # Interest rate
-    base_rate_type: str = "EURIBOR_6M"  # "EURIBOR_3M" | "EURIBOR_6M" | "fixed"
+    base_rate_type: str = "FLAT"  # "FLAT" | "EURIBOR_1M" | "EURIBOR_3M" | "EURIBOR_6M" | "fixed"
+    # Note: "FLAT" uses all_in_rate directly (no EURIBOR curve) — hedge-equivalent
     base_rate_floor: float = 0.0  # Floor on EURIBOR (typically 0%)
-    base_rate: float = 0.03  # Base rate (3% EURIBOR)
+    base_rate: float = 0.02427  # Base rate = EURIBOR 6M spot (April 2026 = 2.427%)
     margin_bps: int = 265  # Credit margin in bps (200-350 bps typical)
     floating_share: float = 0.2  # Share of floating rate debt (20%)
     fixed_share: float = 0.8  # Share of fixed rate debt (80%)
@@ -66,7 +67,12 @@ class SeniorDebtParams:
     
     @property
     def all_in_rate(self) -> float:
-        """All-in interest rate (base + margin)."""
+        """All-in interest rate (base + margin).
+        
+        Note: For EURIBOR modes, this is the STARTING all-in rate.
+        The actual rate schedule varies with EURIBOR curve.
+        For FLAT mode, this IS the constant rate used.
+        """
         return self.base_rate + self.margin_bps / 10000
     
     @property
