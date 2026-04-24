@@ -312,6 +312,7 @@ def build_balance_sheet(
     shl_initial_keur: float,
     dsra_schedule: dict[int, float],
     cash_schedule: dict[int, float],
+    distribution_schedule: dict[int, float],
     debt_schedule: list[DebtServiceRow],  # Period-level debt schedule
 ) -> list[BalanceSheetRow]:
     """Build annual balance sheet.
@@ -324,6 +325,7 @@ def build_balance_sheet(
         shl_initial_keur: Initial SHL amount in kEUR
         dsra_schedule: Dict mapping year_index → DSRA balance
         cash_schedule: Dict mapping year_index → cash balance
+        distribution_schedule: Dict mapping year_index → annual distributions to equity
         debt_schedule: Debt service schedule (period-level)
 
     Returns:
@@ -370,12 +372,13 @@ def build_balance_sheet(
         total_liabilities = total_ncl + total_cl
 
         # Equity
-        current_profit = inc.net_income_keur
+        # Retained earnings: accumulate net income, deduct distributions
+        distribution = distribution_schedule.get(year, 0.0)
+        retained_earnings += current_profit - distribution
         total_equity = (
             share_capital_keur
             + share_premium_keur
             + retained_earnings
-            + current_profit
         )
         total_l_and_e = total_liabilities + total_equity
 

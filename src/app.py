@@ -1578,13 +1578,15 @@ def main():
                 result.periods, fin_dep_dict, tax_dep_dict, horizon
             )
             
-            # Build dsra_schedule and cash_schedule from waterfall periods (H2 = end of year)
+            # Build dsra_schedule, cash_schedule, and distribution_schedule from waterfall periods (H2 = end of year)
             dsra_schedule = {}
             cash_schedule = {}
+            distribution_schedule = {}
             for p in result.periods:
                 if p.is_operation and p.period_in_year == 2:
                     dsra_schedule[p.year_index] = p.dsra_balance_keur
                     cash_schedule[p.year_index] = p.cash_balance_keur
+                    distribution_schedule[p.year_index] = p.distribution_keur
             
             # Build debt schedule from waterfall
             debt_schedule = build_debt_schedule_simple(result.periods, rate)
@@ -1604,6 +1606,7 @@ def main():
                 shl_initial_keur=shl_initial,
                 dsra_schedule=dsra_schedule,
                 cash_schedule=cash_schedule,
+                distribution_schedule=distribution_schedule,
                 debt_schedule=debt_schedule,
             )
             
