@@ -37,6 +37,14 @@ from domain.analytics.scenarios import (
     YieldScenario, get_scenario_hours, run_scenario, compare_scenarios,
     ScenarioResult,
 )
+from domain.reporting.financial_statements import (
+    build_income_statement, build_balance_sheet,
+    build_cash_flow_statement, build_debt_schedule_simple,
+)
+from domain.financing.depreciation import (
+    financial_depreciation_schedule, tax_depreciation_schedule,
+    DepreciationParams,
+)
 from src.app_builder import build_inputs_from_ui
 from domain.inputs import ProjectInputs
 
@@ -1332,29 +1340,50 @@ def main():
                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                     discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                    gearing_ratio=inputs.financing.gearing_ratio,
                 )
             
-            # Build P&L DataFrame
+            # Determine depreciation params from tech_type
+            tech_prefix = tech_type.split("_")[0] if "_" in tech_type else tech_type
+            if tech_prefix == "solar":
+                dep_params = DepreciationParams.create_solar_hr()
+            elif tech_prefix == "wind":
+                dep_params = DepreciationParams.create_wind_hr()
+            else:
+                dep_params = DepreciationParams.create_bess_hr()
+            
+            # Build financial and tax depreciation schedules (annual, kEUR)
+            fin_dep_annual = financial_depreciation_schedule(inputs.capex.total_capex, dep_params, horizon)
+            tax_dep_annual = tax_depreciation_schedule(inputs.capex.total_capex, dep_params, horizon)
+            fin_dep_dict = {y + 1: v for y, v in enumerate(fin_dep_annual)}
+            tax_dep_dict = {y + 1: v for y, v in enumerate(tax_dep_annual)}
+            
+            # Build income statement using domain builder
+            income_rows = build_income_statement(
+                result.periods, fin_dep_dict, tax_dep_dict, horizon
+            )
+            
+            # Convert to DataFrame for display
             pl_data = []
-            for p in result.periods:
-                if p.year_index > 0 and p.year_index <= horizon:
-                    ebitda = p.ebitda_keur
-                    depreciation = p.depreciation_keur if p.depreciation_keur > 0 else (inputs.capex.total_capex / horizon / 2)
-                    interest = p.interest_senior_keur + p.interest_shl_keur
-                    ebt = ebitda - depreciation - interest
-                    tax = p.tax_keur if p.tax_keur > 0 else 0
-                    net_income = ebt - tax
-                    pl_data.append({
-                        "Year": p.year_index,
-                        "Revenue (kEUR)": f"{p.revenue_keur:,.0f}",
-                        "OPEX (kEUR)": f"{-p.opex_keur:,.0f}",
-                        "EBITDA (kEUR)": f"{ebitda:,.0f}",
-                        "Depreciation (kEUR)": f"{-depreciation:,.0f}",
-                        "Interest (kEUR)": f"{-interest:,.0f}",
-                        "EBT (kEUR)": f"{ebt:,.0f}",
-                        "Tax (kEUR)": f"{-tax:,.0f}",
-                        "Net Income (kEUR)": f"{net_income:,.0f}",
-                    })
+            for row in income_rows:
+                pl_data.append({
+                    "Year": row.year,
+                    "PPA Revenue (kEUR)": f"{row.ppa_revenue_keur:,.0f}",
+                    "Total Revenue (kEUR)": f"{row.total_revenue_keur:,.0f}",
+                    "OPEX (kEUR)": f"{-row.opex_keur:,.0f}",
+                    "EBITDA (kEUR)": f"{row.ebitda_keur:,.0f}",
+                    "EBITDA Margin (%)": f"{row.ebitda_margin_pct*100:.1f}%",
+                    "Fin Depreciation (kEUR)": f"{-row.depreciation_financial_keur:,.0f}",
+                    "EBIT (kEUR)": f"{row.ebit_keur:,.0f}",
+                    "Interest Senior (kEUR)": f"{-row.interest_senior_keur:,.0f}",
+                    "Interest SHL (kEUR)": f"{-row.interest_shl_keur:,.0f}",
+                    "EBT (kEUR)": f"{row.ebt_keur:,.0f}",
+                    "Tax Depreciation (kEUR)": f"{row.tax_depreciation_keur:,.0f}",
+                    "Taxable Profit (kEUR)": f"{row.taxable_profit_keur:,.0f}",
+                    "Tax (kEUR)": f"{-row.income_tax_keur:,.0f}",
+                    "Eff. Tax Rate (%)": f"{row.effective_tax_rate_pct*100:.1f}%",
+                    "Net Income (kEUR)": f"{row.net_income_keur:,.0f}",
+                })
             
             if pl_data:
                 df_pl = pd.DataFrame(pl_data)
@@ -1384,46 +1413,84 @@ def main():
                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                     discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                    gearing_ratio=inputs.financing.gearing_ratio,
                 )
             
-            # Build Balance Sheet
-            total_capex = inputs.capex.total_capex
-            initial_equity = total_capex * (1 - debt_config.senior.gearing_ratio)
-            senior_debt_initial = debt_config.senior.senior_debt_keur if debt_config.senior.senior_debt_keur > 0 else debt_config.senior.compute_debt_from_gearing(total_capex)
+            # Determine depreciation params from tech_type
+            tech_prefix = tech_type.split("_")[0] if "_" in tech_type else tech_type
+            if tech_prefix == "solar":
+                dep_params = DepreciationParams.create_solar_hr()
+            elif tech_prefix == "wind":
+                dep_params = DepreciationParams.create_wind_hr()
+            else:
+                dep_params = DepreciationParams.create_bess_hr()
             
-            # Aggregate by year
-            bs_data = []
-            cum_debt_repaid = 0
-            cum_net_income = 0
-            cash_balance = 0
+            fin_dep_annual = financial_depreciation_schedule(inputs.capex.total_capex, dep_params, horizon)
+            tax_dep_annual = tax_depreciation_schedule(inputs.capex.total_capex, dep_params, horizon)
+            fin_dep_dict = {y + 1: v for y, v in enumerate(fin_dep_annual)}
+            tax_dep_dict = {y + 1: v for y, v in enumerate(tax_dep_annual)}
             
+            # Build income statement (needed for BS)
+            income_rows = build_income_statement(
+                result.periods, fin_dep_dict, tax_dep_dict, horizon
+            )
+            
+            # Build dsra_schedule and cash_schedule from waterfall periods (H2 = end of year)
+            dsra_schedule = {}
+            cash_schedule = {}
             for p in result.periods:
-                if p.year_index > 0 and p.year_index <= horizon:
-                    cum_debt_repaid += p.senior_principal_keur
-                    cum_net_income += max(0, p.cf_after_tax_keur - p.senior_ds_keur - p.shl_service_keur)
-                    # Use waterfall's cash_balance_keur (H2 end-of-year value)
-                    # This is the actual cumulative cash position after distributions
-                    waterfall_cash = p.cash_balance_keur if hasattr(p, 'cash_balance_keur') else 0
-                    cash_balance = waterfall_cash
-                    
-                    # Calculate period values
-                    remaining_debt = max(0, senior_debt_initial - cum_debt_repaid)
-                    fixed_assets = total_capex - (total_capex / horizon * p.year_index)
-                    # Assets = Fixed Assets + DSRA + Cash (from waterfall)
-                    dsra_balance = getattr(p, 'dsra_balance_keur', 0)
-                    total_assets = fixed_assets + max(0, dsra_balance) + max(0, cash_balance)
-                    equity = total_assets - remaining_debt - (debt_config.shl.shl_keur if debt_config.shl else 0)
-                    
-                    bs_data.append({
-                        "Year": p.year_index,
-                        "Fixed Assets (kEUR)": f"{fixed_assets:,.0f}",
-                        "Cash (kEUR)": f"{max(0, cash_balance):,.0f}",
-                        "Total Assets (kEUR)": f"{total_assets:,.0f}",
-                        "Senior Debt (kEUR)": f"{remaining_debt:,.0f}",
-                        "Total Liabilities (kEUR)": f"{remaining_debt:,.0f}",
-                        "Equity (kEUR)": f"{equity:,.0f}",
-                        "Equity + Liabilities (kEUR)": f"{total_assets:,.0f}",
-                    })
+                if p.is_operation and p.period_in_year == 2:
+                    dsra_schedule[p.year_index] = p.dsra_balance_keur
+                    cash_schedule[p.year_index] = p.cash_balance_keur
+            
+            # Build debt schedule from waterfall
+            debt_schedule = build_debt_schedule_simple(result.periods, rate)
+            
+            # Get equity parameters
+            total_capex = inputs.capex.total_capex
+            share_capital = inputs.financing.share_capital_keur
+            share_premium = inputs.financing.share_premium_keur
+            shl_initial = inputs.financing.shl_amount_keur if hasattr(inputs.financing, 'shl_amount_keur') else (debt_config.shl.shl_keur if debt_config.shl else 0)
+            
+            # Build balance sheet using domain builder
+            bs_rows = build_balance_sheet(
+                income_rows=income_rows,
+                total_capex_keur=total_capex,
+                share_capital_keur=share_capital,
+                share_premium_keur=share_premium,
+                shl_initial_keur=shl_initial,
+                dsra_schedule=dsra_schedule,
+                cash_schedule=cash_schedule,
+                debt_schedule=debt_schedule,
+            )
+            
+            # Check if balanced
+            unbalanced = [r for r in bs_rows if not r.is_balanced]
+            if unbalanced:
+                st.error(f"⚠️ Balance Sheet NOT balanced in {len(unbalanced)} year(s)!")
+                for r in unbalanced[:3]:
+                    st.caption(f"  Year {r.year}: Assets={r.total_assets_keur:,.0f} vs L+E={r.total_liabilities_and_equity_keur:,.0f}")
+            
+            # Convert to DataFrame for display
+            bs_data = []
+            for row in bs_rows:
+                bs_data.append({
+                    "Year": row.year,
+                    "Gross Fixed Assets (kEUR)": f"{row.gross_fixed_assets_keur:,.0f}",
+                    "Accumulated Dep (kEUR)": f"{-row.accumulated_depreciation_keur:,.0f}",
+                    "Net Fixed Assets (kEUR)": f"{row.net_fixed_assets_keur:,.0f}",
+                    "DSRA (kEUR)": f"{row.dsra_balance_keur:,.0f}",
+                    "Cash (kEUR)": f"{row.cash_and_equivalents_keur:,.0f}",
+                    "Total Assets (kEUR)": f"{row.total_assets_keur:,.0f}",
+                    "Senior Debt (kEUR)": f"{row.senior_debt_keur:,.0f}",
+                    "SHL (kEUR)": f"{row.shl_keur:,.0f}",
+                    "Total Liabilities (kEUR)": f"{row.total_liabilities_keur:,.0f}",
+                    "Share Capital (kEUR)": f"{row.share_capital_keur:,.0f}",
+                    "Retained Earnings (kEUR)": f"{row.retained_earnings_keur:,.0f}",
+                    "Equity (kEUR)": f"{row.total_equity_keur:,.0f}",
+                    "L + E (kEUR)": f"{row.total_liabilities_and_equity_keur:,.0f}",
+                    "Balanced": "✅" if row.is_balanced else "❌",
+                })
             
             if bs_data:
                 df_bs = pd.DataFrame(bs_data)
@@ -1453,30 +1520,83 @@ def main():
                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                     discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                    gearing_ratio=inputs.financing.gearing_ratio,
                 )
             
-            # Build Cash Flow Statement
-            cf_data = []
+            # Determine depreciation params from tech_type
+            tech_prefix = tech_type.split("_")[0] if "_" in tech_type else tech_type
+            if tech_prefix == "solar":
+                dep_params = DepreciationParams.create_solar_hr()
+            elif tech_prefix == "wind":
+                dep_params = DepreciationParams.create_wind_hr()
+            else:
+                dep_params = DepreciationParams.create_bess_hr()
+            
+            fin_dep_annual = financial_depreciation_schedule(inputs.capex.total_capex, dep_params, horizon)
+            tax_dep_annual = tax_depreciation_schedule(inputs.capex.total_capex, dep_params, horizon)
+            fin_dep_dict = {y + 1: v for y, v in enumerate(fin_dep_annual)}
+            tax_dep_dict = {y + 1: v for y, v in enumerate(tax_dep_annual)}
+            
+            # Build income statement
+            income_rows = build_income_statement(
+                result.periods, fin_dep_dict, tax_dep_dict, horizon
+            )
+            
+            # Build dsra_schedule and cash_schedule from waterfall periods
+            dsra_schedule = {}
+            cash_schedule = {}
             for p in result.periods:
-                if p.year_index > 0 and p.year_index <= horizon:
-                    # CFADS = EBITDA - Tax (actual cash taxes paid)
-                    cfads = p.ebitda_keur - abs(p.tax_keur) if p.tax_keur < 0 else p.ebitda_keur
-                    # Operating CF = CFADS - interest - principal
-                    operating_cf = cfads - p.interest_senior_keur - p.senior_principal_keur
-                    # Equity CF = Operating CF - debt service reserve movements
-                    equity_cf = p.distribution_keur
-                    
-                    cf_data.append({
-                        "Year": p.year_index,
-                        "EBITDA (kEUR)": f"{p.ebitda_keur:,.0f}",
-                        "Tax (kEUR)": f"{p.tax_keur:,.0f}",
-                        "CFADS (kEUR)": f"{cfads:,.0f}",
-                        "Senior Interest (kEUR)": f"{-p.interest_senior_keur:,.0f}",
-                        "Senior Principal (kEUR)": f"{-p.senior_principal_keur:,.0f}",
-                        "Operating CF (kEUR)": f"{operating_cf:,.0f}",
-                        "Distribution (kEUR)": f"{p.distribution_keur:,.0f}",
-                        "Equity CF (kEUR)": f"{equity_cf:,.0f}",
-                    })
+                if p.is_operation and p.period_in_year == 2:
+                    dsra_schedule[p.year_index] = p.dsra_balance_keur
+                    cash_schedule[p.year_index] = p.cash_balance_keur
+            
+            # Build distribution_schedule (year -> total annual distributions)
+            distribution_schedule = {}
+            for p in result.periods:
+                if p.is_operation and p.year_index > 0:
+                    if p.year_index not in distribution_schedule:
+                        distribution_schedule[p.year_index] = 0.0
+                    distribution_schedule[p.year_index] += p.distribution_keur
+            
+            # Build debt schedule from waterfall
+            debt_schedule = build_debt_schedule_simple(result.periods, rate)
+            
+            # Get equity parameters
+            total_capex = inputs.capex.total_capex
+            equity_injection = inputs.financing.share_capital_keur + inputs.financing.share_premium_keur
+            shl_drawdown = inputs.financing.shl_amount_keur if hasattr(inputs.financing, 'shl_amount_keur') else (debt_config.shl.shl_keur if debt_config.shl else 0)
+            
+            # Build cash flow statement using domain builder
+            cf_rows = build_cash_flow_statement(
+                income_rows=income_rows,
+                total_capex_keur=total_capex,
+                equity_injection_keur=equity_injection,
+                shl_drawdown_keur=shl_drawdown,
+                dsra_schedule=dsra_schedule,
+                distribution_schedule=distribution_schedule,
+                debt_schedule=debt_schedule,
+            )
+            
+            # Convert to DataFrame for display
+            cf_data = []
+            for row in cf_rows:
+                cf_data.append({
+                    "Year": row.year,
+                    "Net Income (kEUR)": f"{row.net_income_keur:,.0f}",
+                    "+ Depreciation (kEUR)": f"{row.add_depreciation_keur:,.0f}",
+                    "- Tax (kEUR)": f"{-row.tax_paid_keur:,.0f}",
+                    "Operating CF (kEUR)": f"{row.operating_cash_flow_keur:,.0f}",
+                    "Capex (kEUR)": f"{row.capex_keur:,.0f}",
+                    "DSRA Movement (kEUR)": f"{row.dsra_movement_keur:,.0f}",
+                    "Investing CF (kEUR)": f"{row.investing_cash_flow_keur:,.0f}",
+                    "Debt Drawdown (kEUR)": f"{row.debt_drawdown_keur:,.0f}",
+                    "Debt Repayment (kEUR)": f"{row.debt_repayment_keur:,.0f}",
+                    "Interest (kEUR)": f"{row.interest_paid_keur:,.0f}",
+                    "Dividends (kEUR)": f"{row.dividends_paid_keur:,.0f}",
+                    "Financing CF (kEUR)": f"{row.financing_cash_flow_keur:,.0f}",
+                    "Net CF (kEUR)": f"{row.net_cash_flow_keur:,.0f}",
+                    "Closing Cash (kEUR)": f"{row.closing_cash_keur:,.0f}",
+                })
             
             if cf_data:
                 df_cf = pd.DataFrame(cf_data)

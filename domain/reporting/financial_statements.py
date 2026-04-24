@@ -211,7 +211,7 @@ def flatten_waterfall(periods) -> list[WaterfallPeriodData]:
             shl_service_keur=getattr(p, 'shl_service_keur', 0.0),
             distribution_keur=getattr(p, 'distribution_keur', 0.0),
             dsra_balance_keur=getattr(p, 'dsra_balance_keur', 0.0),
-            cash_keur=getattr(p, 'cash_keur', 0.0),
+            cash_keur=getattr(p, 'cash_balance_keur', 0.0),
             senior_balance_keur=getattr(p, 'senior_balance_keur', 0.0),
             dscr=getattr(p, 'dscr', float('inf')),
         ))
