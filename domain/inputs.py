@@ -192,8 +192,9 @@ class TechnicalParams:
     """
     capacity_mw: float             # Inputs!D51 - Installed capacity (75.26 MW)
     yield_scenario: str            # Inputs!D52 - "P_50", "P90-10y", etc.
-    operating_hours_p50: float    # Inputs!D64 - P50 yield hours (1,494)
-    operating_hours_p90_10y: float  # Inputs!D68 - P90-10y hours (1,410)
+    operating_hours_p50: float = 0.0    # Inputs!D64 - P50 yield hours (1,494)
+    operating_hours_p90_1y: float | None = None  # P90-1y hours (single year exceedance)
+    operating_hours_p90_10y: float = 0.0  # Inputs!D68 - P90-10y hours (1,410)
     operating_hours_p99_1y: float | None = None  # P99-1y hours (scenario engine)
     pv_degradation: float = 0.004  # Inputs!D56 - Annual degradation (0.4%)
     bess_degradation: float = 0.003  # Inputs!D57 - BESS degradation (0.3%)

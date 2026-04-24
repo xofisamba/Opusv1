@@ -34,6 +34,10 @@ from src.ui.charts import (
 )
 from utils.ui_constants import CHART_CONFIG
 from utils.financial import format_keur, format_pct, format_multiple
+from domain.analytics.scenarios import (
+    YieldScenario, get_scenario_hours, run_scenario, compare_scenarios,
+    ScenarioResult,
+)
 from domain.inputs import ProjectInputs
 
 
@@ -1024,6 +1028,27 @@ def main():
         
         # Regulatory config
         regulatory_config = render_regulatory_config()
+        
+        st.divider()
+        
+        # === SPRINT 3: Scenario Selector ===
+        st.subheader("📊 Scenario Analysis")
+        selected_scenarios = st.multiselect(
+            "Scenarios to Compare",
+            options=["P50", "P90-1y", "P90-10y", "P99-1y"],
+            default=["P50", "P90-10y"],
+            format_func=lambda x: {
+                "P50": "P50 (Median)",
+                "P90-1y": "P90-1y (Single Year)",
+                "P90-10y": "P90-10y (10-Year Avg)",
+                "P99-1y": "P99-1y (Extreme)",
+            }.get(x, x),
+            help="Select yield scenarios to compare",
+        )
+        if len(selected_scenarios) > 1:
+            st.session_state.selected_scenarios = selected_scenarios
+        elif len(selected_scenarios) == 1:
+            st.session_state.selected_scenarios = selected_scenarios
     
     # Main content area - tabs
     tab_overview, tab_generation, tab_revenue, tab_debt, tab_pl, tab_bs, tab_cf, tab_waterfall, tab_tax, tab_regulatory, tab_validation = st.tabs([
@@ -1076,6 +1101,61 @@ def main():
                 st.error(f"  • {err}")
         else:
             st.success("✅ Configuration is valid")
+        
+        # === SPRINT 3: Scenario Comparison Table ===
+        if selected_scenarios and len(selected_scenarios) > 1:
+            inputs = _get_inputs_from_session()
+            engine = _build_engine_from_inputs(inputs)
+            rate = debt_config.senior.all_in_rate / 2
+            tenor_periods = debt_config.senior.tenor_years * 2
+            
+            with st.spinner("Running scenario comparison..."):
+                # Run waterfall once (P50 baseline)
+                try:
+                    base_result = cached_run_waterfall_v3(
+                        inputs=inputs, engine=engine,
+                        rate_per_period=rate, tenor_periods=tenor_periods,
+                        target_dscr=debt_config.senior.target_dscr,
+                        lockup_dscr=debt_config.senior.min_dscr_lockup,
+                        tax_rate=inputs.tax.corporate_rate,
+                        dsra_months=debt_config.senior.dsra_months,
+                        shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
+                        shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
+                        discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                    )
+                    
+                    # Build scenario results
+                    scenario_map = {
+                        "P50": YieldScenario.P50,
+                        "P90-1y": YieldScenario.P90_1Y,
+                        "P90-10y": YieldScenario.P90_10Y,
+                        "P99-1y": YieldScenario.P99_1Y,
+                    }
+                    results = []
+                    for scen in selected_scenarios:
+                        yld = scenario_map.get(scen)
+                        if yld:
+                            r = run_scenario(inputs, yld, base_result)
+                            results.append(r)
+                    
+                    comparison = compare_scenarios(results)
+                    
+                    st.markdown("### 📊 Scenario Comparison")
+                    st.dataframe(
+                        pd.DataFrame({
+                            "Scenario": comparison["scenario"],
+                            "Equity IRR": comparison["equity_irr"],
+                            "Project IRR": comparison["project_irr"],
+                            "NPV (kEUR)": comparison["npv_keur"],
+                            "LCOE (€/MWh)": comparison["lcoe"],
+                            "Avg DSCR": comparison["avg_dscr"],
+                            "Min DSCR": comparison["min_dscr"],
+                            "Dist. (kEUR)": comparison["distribution_keur"],
+                        }),
+                        width="stretch", hide_index=True,
+                    )
+                except Exception as e:
+                    st.warning(f"Scenario comparison: {str(e)}")
     
     with tab_generation:
         st.subheader("Generation")
