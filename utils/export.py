@@ -153,3 +153,164 @@ def waterfall_to_dataframe(result: WaterfallResult) -> "pd.DataFrame":
         })
     
     return pd.DataFrame(data)
+
+
+def export_waterfall_excel(result: "WaterfallResult", filepath: str) -> None:
+    """Export complete waterfall analysis to formatted Excel workbook.
+    
+    Creates a multi-sheet workbook suitable for bank/investor presentation:
+    - Sheet 1: Summary (key metrics)
+    - Sheet 2: Waterfall (period-level cash flows)
+    - Sheet 3: Debt Schedule
+    - Sheet 4: Covenant Compliance
+    
+    Args:
+        result: WaterfallResult from run_waterfall
+        filepath: Output Excel file path
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    
+    wb = Workbook()
+    
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="4472C4")
+    number_format = "#,##0"
+    pct_format = "0.00%"
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    def style_header(ws, row=1):
+        for cell in ws[row]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+    
+    def set_col_widths(ws, widths):
+        for i, w in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+    
+    # ===== SHEET 1: Summary =====
+    ws = wb.active
+    ws.title = "Summary"
+    
+    sc = result.sculpting_result
+    summary_data = [
+        ("Project Finance Summary", ""),
+        ("", ""),
+        ("Debt Sizing", ""),
+        ("Debt (kEUR)", f"{sc.debt_keur:,.0f}"),
+        ("Avg DSCR", f"{result.avg_dscr:.3f}"),
+        ("Min DSCR", f"{result.min_dscr:.3f}"),
+        ("", ""),
+        ("Returns", ""),
+        ("Project IRR", f"{result.project_irr*100:.2f}%"),
+        ("Equity IRR", f"{result.equity_irr*100:.2f}%" if result.equity_irr else "N/A"),
+        ("", ""),
+        ("Cash Flows (kEUR)", ""),
+        ("Total Revenue", f"{result.total_revenue_keur:,.0f}"),
+        ("Total Distributions", f"{result.total_distribution_keur:,.0f}"),
+        ("Total Senior Debt Service", f"{result.total_senior_ds_keur:,.0f}"),
+        ("Total Tax", f"{result.total_tax_keur:,.0f}"),
+    ]
+    
+    for row_idx, (label, value) in enumerate(summary_data, 1):
+        ws.cell(row=row_idx, column=1, value=label)
+        ws.cell(row=row_idx, column=2, value=value)
+        if label and not value:
+            ws.cell(row=row_idx, column=1).font = Font(bold=True)
+    
+    ws.column_dimensions['A'].width = 30
+    ws.column_dimensions['B'].width = 20
+    
+    # ===== SHEET 2: Waterfall =====
+    ws2 = wb.create_sheet("Waterfall")
+    
+    wf_headers = ["Period", "Year", "Half", "Gen (MWh)", "Rev (kEUR)", "EBITDA (kEUR)", 
+                  "CFAT (kEUR)", "Sen DS (kEUR)", "DSCR", "Dist (kEUR)", "Sweep (kEUR)", "Lockup"]
+    wf_data = []
+    for p in result.periods:
+        wf_data.append([
+            p.period, p.year_index, "H1" if p.period_in_year == 1 else "H2",
+            round(p.generation_mwh, 0), round(p.revenue_keur, 0), round(p.ebitda_keur, 0),
+            round(p.cf_after_tax_keur, 0), round(p.senior_ds_keur, 0),
+            round(p.dscr, 3) if p.dscr < float('inf') else 999,
+            round(p.distribution_keur, 0), round(p.cash_sweep_keur, 0),
+            "Y" if p.lockup_active else "N"
+        ])
+    
+    for col, header in enumerate(wf_headers, 1):
+        ws2.cell(row=1, column=col, value=header)
+    style_header(ws2)
+    for row_idx, row_data in enumerate(wf_data, 2):
+        for col_idx, val in enumerate(row_data, 1):
+            cell = ws2.cell(row=row_idx, column=col_idx, value=val)
+            cell.border = thin_border
+    
+    set_col_widths(ws2, [8, 6, 6, 12, 12, 12, 12, 12, 8, 12, 12, 8])
+    
+    # ===== SHEET 3: Debt Schedule =====
+    ws3 = wb.create_sheet("Debt Schedule")
+    
+    ds_headers = ["Period", "Year", "Opening Bal", "Interest", "Principal", "Closing Bal", "DSCR"]
+    ds_data = []
+    for i, (bal, ir, pr) in enumerate(zip(sc.balance_schedule, sc.interest_schedule, sc.principal_schedule)):
+        period = i
+        year = i // 2 + 1
+        half = "H1" if i % 2 == 0 else "H2"
+        ds_data.append([period, year, half, round(bal, 0), round(ir, 0), round(pr, 0), round(sc.balance_schedule[i] if i < len(sc.balance_schedule) else 0, 0), round(sc.dscr_schedule[i], 3) if i < len(sc.dscr_schedule) and sc.dscr_schedule[i] < float('inf') else 999])
+    
+    for col, header in enumerate(ds_headers, 1):
+        ws3.cell(row=1, column=col, value=header)
+    style_header(ws3)
+    for row_idx, row_data in enumerate(ds_data, 2):
+        for col_idx, val in enumerate(row_data, 1):
+            cell = ws3.cell(row=row_idx, column=col_idx, value=val)
+            cell.border = thin_border
+    
+    set_col_widths(ws3, [8, 6, 6, 14, 14, 14, 8])
+    
+    # ===== SHEET 4: Covenant =====
+    ws4 = wb.create_sheet("Covenant")
+    
+    cov_headers = ["Year", "DSCR", "LLCR", "PLCR", "Lockup", "DSCR OK", "LLCR OK", "PLCR OK"]
+    cov_data = []
+    for p in result.periods:
+        if p.is_operation and p.period_in_year == 2:
+            dscr = p.dscr if p.dscr < float('inf') else 999
+            llcr = p.llcr if p.llcr < float('inf') else 999
+            plcr = p.plcr if p.plcr < float('inf') else 999
+            cov_data.append([
+                p.year_index, round(dscr, 3), round(llcr, 3), round(plcr, 3),
+                "Y" if p.lockup_active else "N",
+                "OK" if dscr >= 1.15 else ("WARN" if dscr >= 1.10 else "BREACH"),
+                "OK" if llcr >= 1.15 else "BREACH",
+                "OK" if plcr >= 1.20 else "BREACH",
+            ])
+    
+    for col, header in enumerate(cov_headers, 1):
+        ws4.cell(row=1, column=col, value=header)
+    style_header(ws4)
+    for row_idx, row_data in enumerate(cov_data, 2):
+        for col_idx, val in enumerate(row_data, 1):
+            cell = ws4.cell(row=row_idx, column=col_idx, value=val)
+            cell.border = thin_border
+            # Color code status columns
+            if col_idx >= 6 and isinstance(val, str):
+                if val == "BREACH":
+                    cell.fill = PatternFill("solid", fgColor="FF6B6B")
+                    cell.font = Font(bold=True, color="FFFFFF")
+                elif val == "WARN":
+                    cell.fill = PatternFill("solid", fgColor="FFE066")
+    
+    set_col_widths(ws4, [8, 8, 8, 8, 8, 10, 10, 10])
+    
+    wb.save(filepath)
+    print(f"Excel export saved to: {filepath}")

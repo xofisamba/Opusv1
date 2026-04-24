@@ -1189,7 +1189,7 @@ def main():
                 }
     
     # Main content area - tabs
-    tab_overview, tab_generation, tab_revenue, tab_debt, tab_pl, tab_bs, tab_cf, tab_waterfall, tab_sensitivity, tab_tax, tab_regulatory, tab_validation = st.tabs([
+    tab_overview, tab_generation, tab_revenue, tab_debt, tab_pl, tab_bs, tab_cf, tab_waterfall, tab_sensitivity, tab_covenant, tab_tax, tab_regulatory, tab_validation = st.tabs([
         "📊 Overview",
         "⚡ Generation",
         "💰 Revenue",
@@ -1866,7 +1866,7 @@ def main():
             # Export buttons
             st.markdown("---")
             st.markdown("##### 📥 Export Data")
-            col_exp1, col_exp2 = st.columns(2)
+            col_exp1, col_exp2, col_exp3 = st.columns(3)
             with col_exp1:
                 # CSV: waterfall period data
                 csv_data = []
@@ -1916,6 +1916,23 @@ def main():
                     mime="text/csv",
                     help="Download summary metrics",
                 )
+            with col_exp3:
+                # Excel export
+                try:
+                    from utils.export import export_waterfall_excel
+                    import io
+                    buffer = io.BytesIO()
+                    export_waterfall_excel(result, buffer)
+                    buffer.seek(0)
+                    st.download_button(
+                        label="📁 Download Excel (.xlsx)",
+                        data=buffer,
+                        file_name="waterfall_analysis.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        help="Download complete waterfall analysis as formatted Excel",
+                    )
+                except Exception as e:
+                    st.caption(f"Excel export error: {e}")
     
     with tab_sensitivity:
         st.subheader("📉 Sensitivity Analysis — Tornado Chart")
@@ -2323,6 +2340,129 @@ def main():
             
         except Exception as e:
             st.error(f"Sensitivity analysis failed: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+
+
+    with tab_covenant:
+        st.subheader("🏦 Bank Covenant Compliance")
+        
+        try:
+            inputs = _get_inputs_from_session()
+            engine = _build_engine_from_inputs(inputs)
+            rate = debt_config.senior.all_in_rate / 2
+            tenor_periods = debt_config.senior.tenor_years * 2
+            base_rate_type = debt_config.senior.base_rate_type
+            base_rate_override = (
+                debt_config.senior.all_in_rate / 2 if base_rate_type == "FLAT" else
+                debt_config.senior.base_rate if base_rate_type not in ["FLAT", "EURIBOR_1M", "EURIBOR_3M", "EURIBOR_6M"] else
+                None
+            )
+            
+            rate_schedule = build_rate_schedule(
+                base_rate_type=base_rate_type,
+                tenor_periods=tenor_periods, periods_per_year=2,
+                base_rate_override=base_rate_override,
+                floating_share=debt_config.senior.floating_share,
+                fixed_share=debt_config.senior.fixed_share,
+                hedge_coverage=debt_config.senior.hedged_share,
+                margin_bps=debt_config.senior.margin_bps,
+                base_rate_floor=debt_config.senior.base_rate_floor,
+            )
+            shock_bps = st.session_state.get("sensitivity_shocks", {}).get("rate", 0)
+            if shock_bps > 0:
+                rate_schedule = apply_rate_shock(rate_schedule, int(shock_bps))
+            sensitivity_shocks = st.session_state.get("sensitivity_shocks", {})
+            if sensitivity_shocks:
+                inputs = _apply_sensitivity_shocks(inputs, sensitivity_shocks)
+
+            result = cached_run_waterfall_v3(
+                inputs=inputs, engine=engine,
+                rate_per_period=rate, tenor_periods=tenor_periods,
+                target_dscr=debt_config.senior.target_dscr,
+                lockup_dscr=debt_config.senior.min_dscr_lockup,
+                tax_rate=tax_config.corporate_tax_rate,
+                dsra_months=debt_config.senior.dsra_months,
+                shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
+                shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
+                discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                rate_schedule=rate_schedule,
+            )
+            
+            # Thresholds
+            dscr_min = debt_config.senior.target_dscr  # 1.15
+            llcr_min = debt_config.senior.min_llcr    # 1.15
+            plcr_min = debt_config.senior.min_plcr    # 1.20
+            lockup_min = debt_config.senior.min_dscr_lockup  # 1.10
+            
+            # Build covenant dataframe from waterfall periods (H2 = year-end)
+            covenant_rows = []
+            for p in result.periods:
+                if p.is_operation and p.period_in_year == 2:
+                    dscr = p.dscr if p.dscr < float('inf') else 999
+                    llcr = p.llcr if p.llcr < float('inf') else 999
+                    plcr = p.plcr if p.plcr < float('inf') else 999
+                    lockup = "🔴 LOCKUP" if p.lockup_active else "✅ OK"
+                    
+                    covenant_rows.append({
+                        "Year": p.year_index,
+                        "DSCR": round(dscr, 3),
+                        "LLCR": round(llcr, 3),
+                        "PLCR": round(plcr, 3),
+                        "Lockup": lockup,
+                        "DSCR Status": "🔴" if dscr < lockup_min else ("🟡" if dscr < dscr_min else "✅"),
+                        "LLCR Status": "🔴" if llcr < llcr_min else "✅",
+                        "PLCR Status": "🔴" if plcr < plcr_min else "✅",
+                    })
+            
+            if covenant_rows:
+                df_cov = pd.DataFrame(covenant_rows)
+                
+                # KPIs
+                kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+                with kpi_col1:
+                    st.metric("Min DSCR", f"{df_cov['DSCR'].min():.3f}x", 
+                              delta="🔴 BREACH" if df_cov['DSCR'].min() < lockup_min else "✅ OK")
+                with kpi_col2:
+                    st.metric("Avg DSCR", f"{df_cov['DSCR'].mean():.3f}x")
+                with kpi_col3:
+                    st.metric("Min LLCR", f"{df_cov['LLCR'].min():.3f}x",
+                              delta="🔴 BREACH" if df_cov['LLCR'].min() < llcr_min else "✅ OK")
+                with kpi_col4:
+                    st.metric("Min PLCR", f"{df_cov['PLCR'].min():.3f}x",
+                              delta="🔴 BREACH" if df_cov['PLCR'].min() < plcr_min else "✅ OK")
+                
+                # Covenant table with status highlighting
+                st.markdown("##### Covenant Schedule")
+                
+                # Display with colored status columns
+                display_cols = ["Year", "DSCR", "DSCR Status", "LLCR", "LLCR Status", "PLCR", "PLCR Status", "Lockup"]
+                st.dataframe(
+                    df_cov[display_cols].set_index("Year"),
+                    use_container_width=True,
+                    column_config={
+                        "DSCR": st.column_config.NumberColumn("DSCR", format="%.3f"),
+                        "LLCR": st.column_config.NumberColumn("LLCR", format="%.3f"),
+                        "PLCR": st.column_config.NumberColumn("PLCR", format="%.3f"),
+                    }
+                )
+                
+                # Legend
+                st.markdown("""
+                **Legend:**
+                - 🔴 BREACH = below minimum threshold  
+                - 🟡 WARNING = below target but above lockup
+                - ✅ OK = within covenant limits
+                - 🔴 LOCKUP = distribution blocked (DSCR < 1.10x)
+                """)
+                
+                # Thresholds info
+                st.caption(f"Thresholds — DSCR: {dscr_min:.2f}x target / {lockup_min:.2f}x lockup | LLCR: {llcr_min:.2f}x | PLCR: {plcr_min:.2f}x")
+            else:
+                st.info("No operating periods available yet.")
+                
+        except Exception as e:
+            st.error(f"Covenant calculation failed: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
 
