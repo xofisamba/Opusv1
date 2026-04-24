@@ -295,6 +295,7 @@ def run_waterfall(
     
     # State variables
     dsra_balance = (dsra_months / 12) * (sculpt_result.payment_schedule[0] * 2) if dsra_months > 0 and sculpt_result.payment_schedule else 0  # noqa: E501  mathematically equivalent to: dsra_months * payment / 6, clearer intent
+    shl_balance = shl_amount  # Track remaining SHL balance for bullet repayment
     mra_balance = 0
     cash_balance = 0
     cum_distribution = 0
@@ -379,10 +380,18 @@ def run_waterfall(
         op_period_counter += 1
         
         # SHL service — repaid in every period while outstanding (not just H1)
-        if shl_amount > 0 and period_in_tenor < tenor_periods:
-            shi = shl_amount * shl_rate / 2  # Semi-annual interest
-            shp = shl_amount / tenor_periods  # Equal principal in H1+H2 (not just H1)
+        # SHL bullet repayment: principal repaid only at final period, interest on remaining balance
+        if shl_balance > 0 and period_in_tenor == tenor_periods - 1:
+            # Last period: repay full remaining balance as bullet
+            shi = shl_balance * shl_rate / 2  # Semi-annual interest
+            shp = shl_balance  # Full bullet principal
             shl_svc = shi + shp
+            shl_balance = 0
+        elif shl_balance > 0 and period_in_tenor < tenor_periods:
+            # Interest-only period: no principal repayment until maturity
+            shi = shl_balance * shl_rate / 2
+            shp = 0
+            shl_svc = shi
         else:
             shi = 0
             shp = 0
@@ -395,10 +404,15 @@ def run_waterfall(
             total_interest, ebitda, atad_ebitda_limit=0.30
         )
         
-        # Fiscal reintegration: IDC and upfront fees added back to taxable profit
-        # (HR tax law — only once in first year of operation)
+        # Fiscal reintegration: IDC + bank fees + commitment fees capitalized during
+        # construction, added back to taxable profit in first year of operation
+        # (HR tax law — only once in first operational year)
         if not fiscal_reintegration_applied:
-            fiscal_reintegration = dep * 0.5  # 50% of first-year depreciation
+            fiscal_reintegration = (
+                inputs.capex.idc_keur
+                + inputs.capex.bank_fees_keur
+                + inputs.capex.commitment_fees_keur
+            )
             fiscal_reintegration_applied = True
         else:
             fiscal_reintegration = 0.0
