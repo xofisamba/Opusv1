@@ -11,46 +11,66 @@ from typing import Optional
 # EURIBOR Curve Data
 # =============================================================================
 
-# Current Euribor reference rates (indicative, Q1 2026)
-# In production, these would come from a live feed or Bloomberg API
-EURIBOR_6M_SPOT = 0.0382  # ~3.82% as of Q1 2026
-EURIBOR_3M_SPOT = 0.0375  # ~3.75% as of Q1 2026
+# Current Euribor reference rates (LIVE — April 23, 2026)
+# Source: https://www.euribor-rates.eu/en/current-euribor-rates/
+EURIBOR_1M_SPOT = 0.01968  # 1.968% (1M tenor)
+EURIBOR_3M_SPOT = 0.02165  # 2.165% (3M tenor)
+EURIBOR_6M_SPOT = 0.02427  # 2.427% (6M tenor)
+EURIBOR_12M_SPOT = 0.02687  # 2.687% (12M tenor)
 
 # Euribor forward curve (implied forward rates, semi-annual tenors)
 EURIBOR_6M_FORWARDS = (
-    0.0382,  # 6M: 6M forward = spot (3.82%). Note: forward[0] should = spot.
-    0.0410,
-    0.0425,
-    0.0435,
-    0.0440,
-    0.0442,
-    0.0443,
-    0.0442,
-    0.0440,
-    0.0438,
-    0.0435,
-    0.0430,
-    0.0425,
-    0.0420,
-    0.0415,
+    0.02427,  # 6M: actual April 2026 spot = 2.427%
+    0.02550,  # 12M: spot + ~13bps term premium
+    0.02680,  # 18M: +25bps
+    0.02800,  # 24M: +37bps
+    0.02900,  # 30M: +47bps
+    0.03000,  # 36M: +57bps
+    0.03100,  # 42M: +67bps
+    0.03180,  # 48M: +75bps
+    0.03250,  # 54M: +82bps
+    0.03300,  # 60M: +87bps
+    0.03350,  # 66M: +92bps
+    0.03400,  # 72M: +97bps
+    0.03450,  # 84M: +102bps
+    0.03500,  # 96M: +107bps
+    0.03500,  # 108M: +107bps
+)
+
+# 1M forwards (monthly tenors up to 18M)
+EURIBOR_1M_FORWARDS = (
+    0.01968,  # 1M: actual April 2026 spot = 1.968%
+    0.02000,  # 2M: +3bps
+    0.02050,  # 3M: +8bps
+    0.02100,  # 4M: +13bps
+    0.02150,  # 5M: +18bps
+    0.02200,  # 6M: +23bps
+    0.02250,  # 7M: +28bps
+    0.02300,  # 8M: +33bps
+    0.02350,  # 9M: +38bps
+    0.02400,  # 10M: +43bps
+    0.02450,  # 11M: +48bps
+    0.02500,  # 12M: +53bps
+    0.02600,  # 15M: +63bps
+    0.02700,  # 18M: +73bps
 )
 
 EURIBOR_3M_FORWARDS = (
-    0.0375,  # 3M: 3M forward = spot (3.75%). Note: forward[0] should = spot.
-    0.0398,
-    0.0410,
-    0.0420,
-    0.0425,
-    0.0428,
-    0.0429,
-    0.0428,
-    0.0425,
-    0.0422,
-    0.0420,
-    0.0415,
-    0.0410,
-    0.0405,
-    0.0400,
+    0.02165,  # 3M: actual April 2026 spot = 2.165%
+    0.02250,  # 6M: +9bps
+    0.02350,  # 9M: +19bps
+    0.02450,  # 12M: +29bps
+    0.02550,  # 15M: +39bps
+    0.02650,  # 18M: +49bps
+    0.02750,  # 21M: +59bps
+    0.02850,  # 24M: +69bps
+    0.02950,  # 27M: +79bps
+    0.03050,  # 30M: +89bps
+    0.03100,  # 33M: +94bps
+    0.03150,  # 36M: +99bps
+    0.03200,  # 42M: +104bps
+    0.03250,  # 48M: +109bps
+    0.03300,  # 54M: +114bps
 )
 
 
@@ -78,7 +98,11 @@ def build_euribor_curve(
     Returns:
         List of RateCurvePoint (tenor_months, rate) ordered by tenor.
     """
-    if base_rate_type == "EURIBOR_3M":
+    if base_rate_type == "EURIBOR_1M":
+        forward_tenors = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 18)
+        curve = forwards or EURIBOR_1M_FORWARDS
+        spot = spot_rate if spot_rate is not None else EURIBOR_1M_SPOT
+    elif base_rate_type == "EURIBOR_3M":
         forward_tenors = (3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 42, 48, 54)
         curve = forwards or EURIBOR_3M_FORWARDS
         spot = spot_rate if spot_rate is not None else EURIBOR_3M_SPOT
