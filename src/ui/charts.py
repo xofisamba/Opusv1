@@ -109,7 +109,6 @@ def create_waterfall_summary_chart(result: "WaterfallResult") -> go.Figure:
         yaxis_title="kEUR",
         barmode="relative",
     )
-    fig.update_layout(config=CHART_CONFIG)
     
     return fig
 
@@ -171,7 +170,6 @@ def create_dscr_chart(result: "WaterfallResult") -> go.Figure:
         yaxis_title="DSCR (x)",
         xaxis_title="Period",
     )
-    fig.update_layout(config=CHART_CONFIG)
     
     return fig
 
@@ -206,7 +204,6 @@ def create_debt_balance_chart(result: "WaterfallResult") -> go.Figure:
         yaxis_title="kEUR",
         xaxis_title="Period",
     )
-    fig.update_layout(config=CHART_CONFIG)
     
     return fig
 
