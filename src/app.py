@@ -1956,7 +1956,6 @@ def main():
         st.subheader("📉 Sensitivity Analysis — Tornado Chart")
         
         try:
-            import plotly.graph_objects as go
             from dataclasses import replace
             
             # Build base case inputs
@@ -2360,7 +2359,6 @@ def main():
                         matrix.append(row)
                     
                     # Render heatmap
-                    import plotly.express as px
                     
                     # Format labels
                     labels1 = [f"{v1:.2f}" for v1 in vals1]
