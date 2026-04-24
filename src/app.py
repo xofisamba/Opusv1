@@ -1902,7 +1902,6 @@ def main():
                         "Dist (kEUR)": round(p.distribution_keur, 0),
                         "Sweep (kEUR)": round(p.cash_sweep_keur, 0),
                     })
-                import pandas as pd
                 df_waterfall = pd.DataFrame(csv_data)
                 csv_waterfall = df_waterfall.to_csv(index=False).encode('utf-8')
                 st.download_button(
