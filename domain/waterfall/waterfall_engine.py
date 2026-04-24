@@ -21,7 +21,8 @@ from typing import Optional
 from datetime import date
 
 from domain.financing.sculpting_iterative import (
-    iterative_sculpt_debt, IterativeSculptResult
+    iterative_sculpt_debt, IterativeSculptResult,
+    closed_form_sculpt, ClosedFormSculptResult,
 )
 from domain.financing.schedule import senior_debt_amount
 from domain.returns.xirr import xirr, xnpv
@@ -227,17 +228,20 @@ def run_waterfall(
         WaterfallResult with all periods and metrics
     """
     # Step 1: Iterative sculpting to find debt amount
-    sculpt_result = iterative_sculpt_debt(
-        ebitda_schedule,
-        rate_per_period,
-        tenor_periods,
-        target_dscr,
-        lockup_dscr,
-        initial_debt_guess=total_capex * 0.70,  # Start from gearing
+    # Build rate schedule (flat for now)
+    rate_schedule = [rate_per_period] * tenor_periods
+    cfads_for_sculpt = ebitda_schedule[:tenor_periods]
+    
+    sculpt_result = closed_form_sculpt(
+        cfads_schedule=cfads_for_sculpt,
+        rate_schedule=rate_schedule,
+        tenor_periods=tenor_periods,
+        target_dscr=target_dscr,
+        gearing_cap_keur=total_capex * 0.80,  # 80% gearing cap
     )
     
     debt = sculpt_result.debt_keur
-    payments = sculpt_result.payments
+    payments = sculpt_result.payment_schedule
     interest_schedule = sculpt_result.interest_schedule
     principal_schedule = sculpt_result.principal_schedule
     balance_schedule = sculpt_result.balance_schedule
@@ -246,7 +250,7 @@ def run_waterfall(
     waterfall_periods = []
     
     # State variables
-    dsra_balance = dsra_months * (sculpt_result.payments[0] if sculpt_result.payments else 0) / 6 if dsra_months > 0 else 0
+    dsra_balance = dsra_months * (sculpt_result.payment_schedule[0] if sculpt_result.payment_schedule else 0) / 6 if dsra_months > 0 else 0
     mra_balance = 0
     cash_balance = 0
     cum_distribution = 0
@@ -479,7 +483,7 @@ def run_waterfall(
         total_distribution_keur=cum_distribution,
         avg_dscr=sculpt_result.avg_dscr,
         min_dscr=sculpt_result.min_dscr,
-        max_dscr=sculpt_result.max_dscr,
+        max_dscr=max(sculpt_result.dscr_schedule) if sculpt_result.dscr_schedule else 0.0,
         # WARN-2 fix: filter out inf values for min calculation
         min_llcr=min((wp.llcr for wp in waterfall_periods if 0 < wp.llcr < float('inf')), default=0.0),
         min_plcr=min((wp.plcr for wp in waterfall_periods if 0 < wp.plcr < float('inf')), default=0.0),
