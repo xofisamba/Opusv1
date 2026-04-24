@@ -24,6 +24,7 @@ from domain.models import (
     SolarOpexParams, WindOpexParams, BESSOpexParams,
 )
 from utils.cache import cached_run_waterfall_v3  # v3: proper hash_funcs
+from utils.rate_curve import build_rate_schedule, apply_rate_shock
 from domain.period_engine import PeriodEngine, PeriodFrequency as PF
 from domain.inputs import ProjectInputs, PeriodFrequency
 from src.ui.charts import (
@@ -1198,6 +1199,22 @@ def main():
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
             
+            # Build Euribor rate curve for this run
+            shock_bps = st.session_state.get("sensitivity_shocks", {}).get("rate", 0)
+            rate_schedule = build_rate_schedule(
+                base_rate_type=debt_config.senior.base_rate_type,
+                tenor_periods=tenor_periods,
+                periods_per_year=2,
+                base_rate_override=debt_config.senior.base_rate if debt_config.senior.base_rate_type == "FIXED" else None,
+                floating_share=debt_config.senior.floating_share,
+                fixed_share=debt_config.senior.fixed_share,
+                hedge_coverage=debt_config.senior.hedged_share,
+                margin_bps=debt_config.senior.margin_bps,
+                base_rate_floor=debt_config.senior.base_rate_floor,
+            )
+            if shock_bps > 0:
+                rate_schedule = apply_rate_shock(rate_schedule, int(shock_bps))
+            
             with st.spinner("Running P90 sizing..."):
                 try:
                     # Step 1: P90-10Y sizing run — determine fixed debt
@@ -1213,6 +1230,7 @@ def main():
                         shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                         discount_rate_project=0.0641, discount_rate_equity=0.0965,
                         fixed_debt_keur=None,  # Let it size for P90
+                        rate_schedule=rate_schedule,  # Euribor curve
                     )
                     fixed_debt_keur = p90_result.sculpting_result.debt_keur if hasattr(p90_result, 'sculpting_result') else p90_result.debt_keur
                     
@@ -1229,6 +1247,7 @@ def main():
                             shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                             discount_rate_project=0.0641, discount_rate_equity=0.0965,
                             fixed_debt_keur=fixed_debt_keur,
+                            rate_schedule=rate_schedule,  # Euribor curve
                         )
                     
                     # Build scenario results
@@ -1350,6 +1369,22 @@ def main():
             tenor_periods = debt_config.senior.tenor_years * 2
             
             with st.spinner("Calculating P&L..."):
+                
+                rate_schedule = build_rate_schedule(
+                    base_rate_type=debt_config.senior.base_rate_type,
+                    tenor_periods=tenor_periods,
+                    periods_per_year=2,
+                    base_rate_override=debt_config.senior.base_rate if debt_config.senior.base_rate_type == "FIXED" else None,
+                    floating_share=debt_config.senior.floating_share,
+                    fixed_share=debt_config.senior.fixed_share,
+                    hedge_coverage=debt_config.senior.hedged_share,
+                    margin_bps=debt_config.senior.margin_bps,
+                    base_rate_floor=debt_config.senior.base_rate_floor,
+                )
+                shock_bps = st.session_state.get("sensitivity_shocks", {}).get("rate", 0)
+                if shock_bps > 0:
+                    rate_schedule = apply_rate_shock(rate_schedule, int(shock_bps))
+
                 result = cached_run_waterfall_v3(
                     inputs=inputs, engine=engine,
                     rate_per_period=rate, tenor_periods=tenor_periods,
@@ -1361,6 +1396,7 @@ def main():
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                     discount_rate_project=0.0641, discount_rate_equity=0.0965,
                     gearing_ratio=inputs.financing.gearing_ratio,
+                    rate_schedule=rate_schedule,
                 )
             
             # Determine depreciation params from tech_type
@@ -1423,6 +1459,22 @@ def main():
             tenor_periods = debt_config.senior.tenor_years * 2
             
             with st.spinner("Calculating Balance Sheet..."):
+                
+                rate_schedule = build_rate_schedule(
+                    base_rate_type=debt_config.senior.base_rate_type,
+                    tenor_periods=tenor_periods,
+                    periods_per_year=2,
+                    base_rate_override=debt_config.senior.base_rate if debt_config.senior.base_rate_type == "FIXED" else None,
+                    floating_share=debt_config.senior.floating_share,
+                    fixed_share=debt_config.senior.fixed_share,
+                    hedge_coverage=debt_config.senior.hedged_share,
+                    margin_bps=debt_config.senior.margin_bps,
+                    base_rate_floor=debt_config.senior.base_rate_floor,
+                )
+                shock_bps = st.session_state.get("sensitivity_shocks", {}).get("rate", 0)
+                if shock_bps > 0:
+                    rate_schedule = apply_rate_shock(rate_schedule, int(shock_bps))
+
                 result = cached_run_waterfall_v3(
                     inputs=inputs, engine=engine,
                     rate_per_period=rate, tenor_periods=tenor_periods,
@@ -1434,6 +1486,7 @@ def main():
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                     discount_rate_project=0.0641, discount_rate_equity=0.0965,
                     gearing_ratio=inputs.financing.gearing_ratio,
+                    rate_schedule=rate_schedule,
                 )
             
             # Determine depreciation params from tech_type
@@ -1530,6 +1583,22 @@ def main():
             tenor_periods = debt_config.senior.tenor_years * 2
             
             with st.spinner("Calculating Cash Flow..."):
+                
+                rate_schedule = build_rate_schedule(
+                    base_rate_type=debt_config.senior.base_rate_type,
+                    tenor_periods=tenor_periods,
+                    periods_per_year=2,
+                    base_rate_override=debt_config.senior.base_rate if debt_config.senior.base_rate_type == "FIXED" else None,
+                    floating_share=debt_config.senior.floating_share,
+                    fixed_share=debt_config.senior.fixed_share,
+                    hedge_coverage=debt_config.senior.hedged_share,
+                    margin_bps=debt_config.senior.margin_bps,
+                    base_rate_floor=debt_config.senior.base_rate_floor,
+                )
+                shock_bps = st.session_state.get("sensitivity_shocks", {}).get("rate", 0)
+                if shock_bps > 0:
+                    rate_schedule = apply_rate_shock(rate_schedule, int(shock_bps))
+
                 result = cached_run_waterfall_v3(
                     inputs=inputs, engine=engine,
                     rate_per_period=rate, tenor_periods=tenor_periods,
@@ -1541,6 +1610,7 @@ def main():
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                     discount_rate_project=0.0641, discount_rate_equity=0.0965,
                     gearing_ratio=inputs.financing.gearing_ratio,
+                    rate_schedule=rate_schedule,
                 )
             
             # Determine depreciation params from tech_type
@@ -1637,6 +1707,22 @@ def main():
             tenor_periods = debt_config.senior.tenor_years * 2
             
             with st.spinner("Calculating waterfall..."):
+                
+                rate_schedule = build_rate_schedule(
+                    base_rate_type=debt_config.senior.base_rate_type,
+                    tenor_periods=tenor_periods,
+                    periods_per_year=2,
+                    base_rate_override=debt_config.senior.base_rate if debt_config.senior.base_rate_type == "FIXED" else None,
+                    floating_share=debt_config.senior.floating_share,
+                    fixed_share=debt_config.senior.fixed_share,
+                    hedge_coverage=debt_config.senior.hedged_share,
+                    margin_bps=debt_config.senior.margin_bps,
+                    base_rate_floor=debt_config.senior.base_rate_floor,
+                )
+                shock_bps = st.session_state.get("sensitivity_shocks", {}).get("rate", 0)
+                if shock_bps > 0:
+                    rate_schedule = apply_rate_shock(rate_schedule, int(shock_bps))
+
                 result = cached_run_waterfall_v3(
                     inputs=inputs,
                     engine=engine,
@@ -1650,6 +1736,7 @@ def main():
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                     discount_rate_project=0.0641,
                     discount_rate_equity=0.0965,
+                    rate_schedule=rate_schedule,
                 )
             
             # KPI Strip — uvijek na vrhu, bez expandera

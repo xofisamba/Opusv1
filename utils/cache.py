@@ -359,6 +359,7 @@ def cached_run_waterfall_v3(
     discount_rate_project: float = 0.0641,
     discount_rate_equity: float = 0.0965,
     fixed_debt_keur: float | None = None,  # Override sculpted debt (for P90 sizing)
+    rate_schedule: list[float] | None = None,  # Per-period rate schedule (Euribor curve)
 ) -> "WaterfallResult":
     """Cached waterfall computation with proper hash_funcs.
 
@@ -443,4 +444,5 @@ def cached_run_waterfall_v3(
         financial_close=inputs.info.financial_close,
         gearing_ratio=inputs.financing.gearing_ratio,
         fixed_debt_keur=fixed_debt_keur,
+        rate_schedule=rate_schedule,
     )

@@ -208,6 +208,7 @@ def run_waterfall(
     financial_close: 'date' = None,
     gearing_ratio: float = 0.80,  # Used for sizing cap in closed_form_sculpt
     fixed_debt_keur: float | None = None,  # Override sculpted debt (for P90 sizing scenarios)
+    rate_schedule: list[float] | None = None,  # Per-period rate schedule (Euribor curve). If None, uses flat rate_per_period.
 ) -> WaterfallResult:
     """Run full waterfall with iterative debt sculpting.
 
@@ -235,8 +236,15 @@ def run_waterfall(
         WaterfallResult with all periods and metrics
     """
     # Step 1: Iterative sculpting to find debt amount
-    # Build rate schedule (flat for now)
-    rate_schedule = [rate_per_period] * tenor_periods
+    # Use provided rate_schedule if available, otherwise use flat rate
+    if rate_schedule is None:
+        rate_schedule = [rate_per_period] * tenor_periods
+    else:
+        # Extend or trim to match tenor_periods
+        if len(rate_schedule) < tenor_periods:
+            rate_schedule = list(rate_schedule) + [rate_schedule[-1]] * (tenor_periods - len(rate_schedule))
+        elif len(rate_schedule) > tenor_periods:
+            rate_schedule = rate_schedule[:tenor_periods]
     cfads_for_sculpt = ebitda_schedule[:tenor_periods]
     
     sculpt_result = closed_form_sculpt(
@@ -474,8 +482,10 @@ def run_waterfall(
         # Closing balance: next period's balance, capped at last index
         balance_idx = min(period_in_tenor + 1, len(balance_schedule) - 1) if balance_schedule else 0
         remaining_balance = balance_schedule[balance_idx] if balance_schedule else 0
-        llcr_val = compute_llcr(remaining_fcf, remaining_balance, rate_per_period, tenor_periods - period_in_tenor)
-        plcr_val = compute_plcr(remaining_fcf, remaining_balance, rate_per_period, len(remaining_fcf))
+        # Use period-specific rate from schedule if available
+        rate_for_llcr = rate_schedule[period_in_tenor] if rate_schedule and period_in_tenor < len(rate_schedule) else rate_per_period
+        llcr_val = compute_llcr(remaining_fcf, remaining_balance, rate_for_llcr, tenor_periods - period_in_tenor)
+        plcr_val = compute_plcr(remaining_fcf, remaining_balance, rate_for_llcr, len(remaining_fcf))
         wp = WaterfallPeriod(
             period=period.index,
             date=period.end_date,
