@@ -38,6 +38,7 @@ from domain.analytics.scenarios import (
     YieldScenario, get_scenario_hours, run_scenario, compare_scenarios,
     ScenarioResult,
 )
+from src.app_builder import build_inputs_from_ui
 from domain.inputs import ProjectInputs
 
 
@@ -458,6 +459,30 @@ def render_agrivoltaic_inputs() -> TechnologyConfig:
     solar.agrivoltaic_land_rental_premium = land_premium
     
     return TechnologyConfig(technology_type="agrivoltaic", solar=solar)
+
+
+# =============================================================================
+# SPRINT 2: SIDEBAR → MODEL BRIDGE
+# =============================================================================
+
+def _build_engine_from_inputs(inputs: ProjectInputs) -> PeriodEngine:
+    """"Build PeriodEngine from ProjectInputs."""
+    freq = PF.SEMESTRIAL if inputs.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
+    return PeriodEngine(
+        financial_close=inputs.info.financial_close,
+        construction_months=inputs.info.construction_months,
+        horizon_years=inputs.info.horizon_years,
+        ppa_years=inputs.revenue.ppa_term_years,
+        frequency=freq,
+    )
+
+
+def _get_inputs_from_session() -> ProjectInputs:
+    """Get inputs from session_state or fallback to Oborovo default."""
+    if st.session_state.get("inputs") is not None:
+        return st.session_state.inputs
+    return ProjectInputs.create_default_oborovo()
+
 
 
 # =============================================================================
