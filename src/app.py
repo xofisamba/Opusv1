@@ -26,7 +26,7 @@ from domain.models import (
 from utils.cache import cached_run_waterfall_v3  # v3: proper hash_funcs
 from utils.rate_curve import build_rate_schedule, apply_rate_shock
 from domain.period_engine import PeriodEngine, PeriodFrequency as PF
-from domain.inputs import ProjectInputs, PeriodFrequency
+from domain.inputs import ProjectInputs, PeriodFrequency, CapexItem
 from src.ui.charts import (
     create_waterfall_summary_chart, 
     create_dscr_chart,
@@ -70,22 +70,24 @@ def _apply_sensitivity_shocks(inputs: ProjectInputs, shocks: dict) -> ProjectInp
     
     from dataclasses import replace
     
-    # Tariff shock: scale ppa_base_price
+    # Tariff shock: scale ppa_base_tariff
     shock_tariff = shocks.get('tariff', 0)
     if shock_tariff != 0:
         inputs = replace(inputs, revenue=replace(
             inputs.revenue,
-            ppa_base_price_eur_mwh=inputs.revenue.ppa_base_price_eur_mwh * (1 + shock_tariff)
+            ppa_base_tariff=inputs.revenue.ppa_base_tariff * (1 + shock_tariff)
         ))
     
-    # Generation shock: scale capacity_factor
+    # Generation shock: scale operating_hours_p50 (base for all yield calculations)
     shock_gen = shocks.get('generation', 0)
     if shock_gen != 0:
-        gen = inputs.generation
-        inputs = replace(inputs, generation=replace(
-            gen,
-            wind_capacity_factor=gen.wind_capacity_factor * (1 + shock_gen)
-            if hasattr(gen, 'wind_capacity_factor') else gen.capacity_factor * (1 + shock_gen)
+        tech = inputs.technical
+        inputs = replace(inputs, technical=replace(
+            tech,
+            operating_hours_p50=tech.operating_hours_p50 * (1 + shock_gen),
+            operating_hours_p90_1y=int(tech.operating_hours_p90_1y * (1 + shock_gen)) if tech.operating_hours_p90_1y else 0,
+            operating_hours_p90_10y=int(tech.operating_hours_p90_10y * (1 + shock_gen)),
+            operating_hours_p99_1y=int(tech.operating_hours_p99_1y * (1 + shock_gen)) if tech.operating_hours_p99_1y else 0,
         ))
     
     # CAPEX shock: scale total_capex
@@ -111,6 +113,7 @@ def _apply_sensitivity_shocks(inputs: ProjectInputs, shocks: dict) -> ProjectInp
                 name=item.name,
                 amount_keur=item.amount_keur * scale,
                 y0_share=item.y0_share,
+                spending_profile=item.spending_profile,
             )
         inputs = replace(inputs, capex=replace(capex, **scaled_items))
     
@@ -2030,11 +2033,11 @@ def main():
                 irr_values = []
                 
                 if var_name == "PPA Tariff":
-                    # Tariff multiplier: scale ppa_base_price
-                    base_tariff = inputs.revenue.ppa_base_price_eur_mwh
+                    # Tariff multiplier: scale ppa_base_tariff
+                    base_tariff = inputs.revenue.ppa_base_tariff
                     for step in range(var["steps"]):
                         mult = var["range"][0] + step * (var["range"][1] - var["range"][0]) / (var["steps"] - 1)
-                        inputs_mod = replace(inputs, revenue=replace(inputs.revenue, ppa_base_price_eur_mwh=base_tariff * mult))
+                        inputs_mod = replace(inputs, revenue=replace(inputs.revenue, ppa_base_tariff=base_tariff * mult))
                         result = compute_waterfall(inputs_mod)
                         var_values.append(mult)
                         irr_values.append(result.project_irr)
@@ -2042,11 +2045,16 @@ def main():
                         progress_bar.progress(completed / total_steps, text=f"{var_name}: {mult:.2f}x")
                         
                 elif var_name == "Generation":
-                    # Generation: scale wind_capacity_factor
-                    base_gen = inputs.generation.wind_capacity_factor
+                    # Generation: scale operating_hours_p50
+                    tech = inputs.technical
+                    base_gen = tech.operating_hours_p50
+                    base_gen_p90 = tech.operating_hours_p90_10y
                     for step in range(var["steps"]):
                         mult = var["range"][0] + step * (var["range"][1] - var["range"][0]) / (var["steps"] - 1)
-                        inputs_mod = replace(inputs, generation=replace(inputs.generation, wind_capacity_factor=base_gen * mult))
+                        inputs_mod = replace(inputs, technical=replace(tech,
+                            operating_hours_p50=base_gen * mult,
+                            operating_hours_p90_10y=int(base_gen_p90 * mult),
+                        ))
                         result = compute_waterfall(inputs_mod)
                         var_values.append(mult)
                         irr_values.append(result.project_irr)
@@ -2106,11 +2114,21 @@ def main():
                         progress_bar.progress(completed / total_steps, text=f"{var_name}: {bps_offset:+.0f}bps")
                         
                 elif var_name == "CAPEX":
-                    # CAPEX: scale total_capex
-                    base_capex = inputs.investment.total_capex_keur
+                    # CAPEX: scale all individual capex items
+                    capex = inputs.capex
+                    capex_attrs = ['epc_contract', 'production_units', 'epc_other', 'grid_connection',
+                                   'ops_prep', 'insurances', 'lease_tax', 'construction_mgmt_a',
+                                   'commissioning', 'audit_legal', 'construction_mgmt_b',
+                                   'contingencies', 'taxes', 'project_acquisition', 'project_rights']
                     for step in range(var["steps"]):
-                        mult = var["range"][0] + step * (var["range"][1] - var["range"][0]) / (var["steps" - 1])
-                        inputs_mod = replace(inputs, investment=replace(inputs.investment, total_capex_keur=base_capex * mult))
+                        mult = var["range"][0] + step * (var["range"][1] - var["range"][0]) / (var["steps"] - 1)
+                        scale = mult
+                        scaled = {a: CapexItem(name=getattr(capex, a).name,
+                                           amount_keur=getattr(capex, a).amount_keur * scale,
+                                           y0_share=getattr(capex, a).y0_share,
+                                           spending_profile=getattr(capex, a).spending_profile)
+                                  for a in capex_attrs}
+                        inputs_mod = replace(inputs, capex=replace(capex, **scaled))
                         result = compute_waterfall(inputs_mod)
                         var_values.append(mult)
                         irr_values.append(result.project_irr)
@@ -2259,25 +2277,53 @@ def main():
                                 inputs_v2 = inputs
                                 
                                 if tw_var1 == "PPA Tariff":
-                                    base_t = inputs.revenue.ppa_base_price_eur_mwh
-                                    inputs_v1 = replace(inputs, revenue=replace(inputs.revenue, ppa_base_price_eur_mwh=base_t * v1))
+                                    base_t = inputs.revenue.ppa_base_tariff
+                                    inputs_v1 = replace(inputs, revenue=replace(inputs.revenue, ppa_base_tariff=base_t * v1))
                                 elif tw_var1 == "Generation":
-                                    base_g = inputs.generation.wind_capacity_factor
-                                    inputs_v1 = replace(inputs, generation=replace(inputs.generation, wind_capacity_factor=base_g * v1))
+                                    tech = inputs.technical
+                                    base_g = tech.operating_hours_p50
+                                    base_g_p90 = tech.operating_hours_p90_10y
+                                    inputs_v1 = replace(inputs, technical=replace(tech,
+                                        operating_hours_p50=base_g * v1,
+                                        operating_hours_p90_10y=int(base_g_p90 * v1),
+                                    ))
                                 elif tw_var1 == "CAPEX":
-                                    base_c = inputs.capex.total_capex
-                                    inputs_v1 = replace(inputs, capex=replace(inputs.capex, total_capex_keur=base_c * v1))
+                                    capex = inputs.capex
+                                    capex_attrs = ['epc_contract', 'production_units', 'epc_other', 'grid_connection',
+                                                   'ops_prep', 'insurances', 'lease_tax', 'construction_mgmt_a',
+                                                   'commissioning', 'audit_legal', 'construction_mgmt_b',
+                                                   'contingencies', 'taxes', 'project_acquisition', 'project_rights']
+                                    scaled = {a: CapexItem(name=getattr(capex, a).name,
+                                                      amount_keur=getattr(capex, a).amount_keur * v1,
+                                                      y0_share=getattr(capex, a).y0_share,
+                                                      spending_profile=getattr(capex, a).spending_profile)
+                                              for a in capex_attrs}
+                                    inputs_v1 = replace(inputs, capex=replace(capex, **scaled))
                                 # Rate handled separately below
                                 
                                 if tw_var2 == "PPA Tariff":
-                                    base_t = inputs.revenue.ppa_base_price_eur_mwh
-                                    inputs_v2 = replace(inputs_v1, revenue=replace(inputs_v1.revenue, ppa_base_price_eur_mwh=base_t * v2))
+                                    base_t = inputs.revenue.ppa_base_tariff
+                                    inputs_v2 = replace(inputs_v1, revenue=replace(inputs_v1.revenue, ppa_base_tariff=base_t * v2))
                                 elif tw_var2 == "Generation":
-                                    base_g = inputs.generation.wind_capacity_factor
-                                    inputs_v2 = replace(inputs_v1, generation=replace(inputs_v1.generation, wind_capacity_factor=base_g * v2))
+                                    tech = inputs_v1.technical
+                                    base_g = tech.operating_hours_p50
+                                    base_g_p90 = tech.operating_hours_p90_10y
+                                    inputs_v2 = replace(inputs_v1, technical=replace(tech,
+                                        operating_hours_p50=base_g * v2,
+                                        operating_hours_p90_10y=int(base_g_p90 * v2),
+                                    ))
                                 elif tw_var2 == "CAPEX":
-                                    base_c = inputs.capex.total_capex
-                                    inputs_v2 = replace(inputs_v1, capex=replace(inputs_v1.capex, total_capex_keur=base_c * v2))
+                                    capex = inputs_v1.capex
+                                    capex_attrs = ['epc_contract', 'production_units', 'epc_other', 'grid_connection',
+                                                   'ops_prep', 'insurances', 'lease_tax', 'construction_mgmt_a',
+                                                   'commissioning', 'audit_legal', 'construction_mgmt_b',
+                                                   'contingencies', 'taxes', 'project_acquisition', 'project_rights']
+                                    scaled = {a: CapexItem(name=getattr(capex, a).name,
+                                                      amount_keur=getattr(capex, a).amount_keur * v2,
+                                                      y0_share=getattr(capex, a).y0_share,
+                                                      spending_profile=getattr(capex, a).spending_profile)
+                                              for a in capex_attrs}
+                                    inputs_v2 = replace(inputs_v1, capex=replace(capex, **scaled))
                                 
                                 # Handle rate for both variables
                                 base_rate_val = debt_config.senior.all_in_rate
