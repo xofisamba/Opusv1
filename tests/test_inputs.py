@@ -90,20 +90,20 @@ class TestCapexStructure:
             name="EPC Contract",
             amount_keur=26430.0,
             y0_share=0.0,
-            spending_profile=(0.083, 0.083, 0.083, 0.083, 0.083, 0.083,
-                              0.083, 0.083, 0.083, 0.083, 0.083, 0.083),
+            spending_profile=(1/12, 1/12, 1/12, 1/12, 1/12, 1/12,
+                              1/12, 1/12, 1/12, 1/12, 1/12, 1/12),
         )
         
         # Y0: 0%
         assert epc.amount_in_period(0) == 0.0
         
-        # Y1: 8.3%
+        # Y1: ~8.33%
         y1_amount = epc.amount_in_period(1)
-        assert abs(y1_amount - 26430 * 0.083) < 1.0
+        assert abs(y1_amount - 26430 * (1/12)) < 1.0
         
-        # Y4: 8.3%
+        # Y4: ~8.33%
         y4_amount = epc.amount_in_period(4)
-        assert abs(y4_amount - 26430 * 0.083) < 1.0
+        assert abs(y4_amount - 26430 * (1/12)) < 1.0
         
         # Y13+: 0% (profile only has 12 entries)
         assert epc.amount_in_period(13) == 0.0

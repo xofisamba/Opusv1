@@ -333,10 +333,10 @@ def run_waterfall(
             senior_ds = 0
         op_period_counter += 1
         
-        # SHL service
+        # SHL service — repaid in every period while outstanding (not just H1)
         if shl_amount > 0 and period_in_tenor < tenor_periods:
-            shi = shl_amount * shl_rate / 2  # Semi-annual
-            shp = shl_amount / (tenor_periods * 2) if period.period_in_year == 1 else 0
+            shi = shl_amount * shl_rate / 2  # Semi-annual interest
+            shp = shl_amount / tenor_periods  # Equal principal in H1+H2 (not just H1)
             shl_svc = shi + shp
         else:
             shi = 0
@@ -384,9 +384,10 @@ def run_waterfall(
             dsra_withdrawal = 0
         cf_after_reserves = cf_after_ds + dsra_withdrawal - dsra_contrib
         
-        # DSCR calculation — industrijski standard: CFADS / Debt Service
-        # CFADS = CF after tax, after reserves (cf_after_reserves)
-        dscr = cf_after_reserves / senior_ds if senior_ds > 0 else float('inf')
+        # DSCR — industrijski standard: CFADS / Senior Debt Service
+        # CFADS = EBITDA - Taxes (PRIJE debt service, PRIJE DSRA movements)
+        ebitda_minus_tax = ebitda - tax_this_period if ebitda is not None else 0
+        dscr = ebitda_minus_tax / senior_ds if senior_ds > 0 else float('inf')
         all_dsrs.append(dscr)
         
         # Lockup check

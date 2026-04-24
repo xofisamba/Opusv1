@@ -50,13 +50,13 @@ def _build_capex_from_capacity(capacity_mw: float) -> CapexStructure:
         name="EPC Contract",
         amount_keur=26430.0 * scale,
         y0_share=0.0,
-        spending_profile=(0.083,) * 12,
+        spending_profile=(1/12,) * 12,
     )
     production_units = CapexItem(
         name="Production Units",
         amount_keur=10912.7 * scale,
         y0_share=0.0,
-        spending_profile=(0.083,) * 12,
+        spending_profile=(1/12,) * 12,
     )
     epc_other = CapexItem(name="Other EPC", amount_keur=3200.0 * scale, y0_share=0.0, spending_profile=(0.5, 0.5))
     grid_connection = CapexItem(name="Grid Connection", amount_keur=1800.0 * scale, y0_share=0.5, spending_profile=(0.5,))

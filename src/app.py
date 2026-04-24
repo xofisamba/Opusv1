@@ -1066,6 +1066,29 @@ def main():
         
         st.divider()
         
+        # === SPRINT A1: Pokreni Model Button ===
+        if st.button("▶ Pokreni Model", type="primary", use_container_width=True):
+            # Clear waterfall cache to force fresh calculation
+            cached_run_waterfall_v3.clear()
+            inputs = build_inputs_from_ui(
+                tech_config=tech_config,
+                revenue_config=revenue_config,
+                debt_config=debt_config,
+                tax_config=tax_config,
+                project_name=project_name,
+                company=jurisdiction,
+                country_iso=jurisdiction,
+            )
+            st.session_state.inputs = inputs
+            st.session_state.engine = _build_engine_from_inputs(inputs)
+            st.rerun()
+        
+        # Initialize on first load
+        if "inputs" not in st.session_state:
+            st.session_state.inputs = None
+        
+        st.divider()
+        
         # === SPRINT 3: Scenario Selector ===
         st.subheader("📊 Scenario Analysis")
         selected_scenarios = st.multiselect(

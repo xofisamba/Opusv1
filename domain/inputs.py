@@ -61,7 +61,7 @@ class CapexItem:
     def __post_init__(self):
         """Validate spending shares sum to approximately 1.0."""
         total = self.total_spending_shares
-        if total > 0 and abs(total - 1.0) > 0.01:
+        if total > 0 and abs(total - 1.0) > 0.001:
             raise ValueError(
                 f'{self.name}: spending shares sum to {total:.4f}, expected 1.0. '
                 f'Check spending_profile or y0_share values.'
@@ -354,13 +354,13 @@ class ProjectInputs:
             name="EPC Contract",
             amount_keur=26430.0,
             y0_share=0.0,
-            spending_profile=(0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083),
+            spending_profile=(1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12),
         )
         production_units = CapexItem(
             name="Production Units",
             amount_keur=10912.7,
             y0_share=0.0,
-            spending_profile=(0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083, 0.083),
+            spending_profile=(1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12),
         )
         epc_other = CapexItem(name="Other EPC", amount_keur=3200.0, y0_share=0.0, spending_profile=(0.5, 0.5))
         grid_connection = CapexItem(name="Grid Connection", amount_keur=1800.0, y0_share=0.5, spending_profile=(0.5,))
@@ -528,10 +528,27 @@ def hash_inputs_for_cache(inputs: "ProjectInputs") -> tuple:
     return (
         inputs.info.financial_close,
         inputs.technical.capacity_mw,
+        inputs.technical.yield_scenario,
+        inputs.technical.operating_hours_p50,
+        inputs.technical.operating_hours_p90_10y,
+        inputs.technical.operating_hours_p99_1y,
         inputs.financing.gearing_ratio,
         inputs.financing.all_in_rate,
+        inputs.financing.senior_tenor_years,
+        inputs.financing.target_dscr,
+        inputs.financing.lockup_dscr,
+        inputs.financing.dsra_months,
+        inputs.financing.shl_amount_keur,
+        inputs.financing.shl_rate,
         inputs.revenue.ppa_base_tariff,
         inputs.revenue.ppa_term_years,
+        inputs.revenue.ppa_index,
+        inputs.revenue.ppa_production_share,
+        inputs.revenue.market_prices_curve,
+        inputs.revenue.market_inflation,
+        inputs.revenue.balancing_cost_pv,
         inputs.capex.total_capex,
         inputs.tax.corporate_rate,
+        inputs.tax.loss_carryforward_years,
+        inputs.tax.atad_ebitda_limit,
     )
