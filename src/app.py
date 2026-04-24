@@ -1456,7 +1456,6 @@ def main():
                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                     discount_rate_project=0.0641, discount_rate_equity=0.0965,
-                    gearing_ratio=inputs.financing.gearing_ratio,
                     rate_schedule=rate_schedule,
                 )
             
@@ -1555,7 +1554,6 @@ def main():
                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                     discount_rate_project=0.0641, discount_rate_equity=0.0965,
-                    gearing_ratio=inputs.financing.gearing_ratio,
                     rate_schedule=rate_schedule,
                 )
             
@@ -1691,7 +1689,6 @@ def main():
                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                     discount_rate_project=0.0641, discount_rate_equity=0.0965,
-                    gearing_ratio=inputs.financing.gearing_ratio,
                     rate_schedule=rate_schedule,
                 )
             

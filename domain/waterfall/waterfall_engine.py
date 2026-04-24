@@ -273,6 +273,7 @@ def run_waterfall(
             dscr = cfads_for_sculpt[t] / payments[t] if payments[t] > 0 else float('inf')
             dscr_sched_scaled.append(dscr)
         sculpt_result = replace(
+            sculpt_result,
             debt_keur=fixed_debt_keur,
             balance_schedule=balance_schedule,
             interest_schedule=interest_schedule,

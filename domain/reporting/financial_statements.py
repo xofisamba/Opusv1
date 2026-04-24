@@ -374,6 +374,7 @@ def build_balance_sheet(
         # Equity
         # Retained earnings: accumulate net income, deduct distributions
         distribution = distribution_schedule.get(year, 0.0)
+        current_profit = inc.net_income_keur
         retained_earnings += current_profit - distribution
         total_equity = (
             share_capital_keur
@@ -406,8 +407,6 @@ def build_balance_sheet(
             total_equity_keur=total_equity,
             total_liabilities_and_equity_keur=total_l_and_e,
         ))
-
-        retained_earnings += current_profit
 
     return rows
 
@@ -442,8 +441,10 @@ def build_cash_flow_statement(
         year = inc.year
 
         # A. Operating
-        op_cf = inc.operating_cash_flow_keur = (
-            inc.net_income_keur + inc.add_depreciation_keur - inc.tax_paid_keur
+        op_cf = (
+            inc.net_income_keur
+            + inc.depreciation_financial_keur
+            - inc.income_tax_keur
         )
 
         # B. Investing
