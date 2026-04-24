@@ -1851,93 +1851,235 @@ def main():
         st.subheader("📉 Sensitivity Analysis — Tornado Chart")
         
         try:
-            from utils.sensitivity import run_one_way_sensitivity, build_tornado_data
             import plotly.graph_objects as go
+            from dataclasses import replace
+            from utils.rate_curve import build_rate_schedule
             
             # Build base case inputs
             inputs = _get_inputs_from_session()
-            engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
+            base_rate_type = debt_config.senior.base_rate_type
+            base_rate_override = (
+                debt_config.senior.all_in_rate / 2 if base_rate_type == "FLAT" else
+                debt_config.senior.base_rate if base_rate_type not in ["FLAT", "EURIBOR_1M", "EURIBOR_3M", "EURIBOR_6M"] else
+                None
+            )
+            
+            rate_schedule = build_rate_schedule(
+                base_rate_type=base_rate_type,
+                tenor_periods=tenor_periods, periods_per_year=2,
+                base_rate_override=base_rate_override,
+                floating_share=debt_config.senior.floating_share,
+                fixed_share=debt_config.senior.fixed_share,
+                hedge_coverage=debt_config.senior.hedged_share,
+                margin_bps=debt_config.senior.margin_bps,
+                base_rate_floor=debt_config.senior.base_rate_floor,
+            )
+            
+            def compute_waterfall(inputs_mod):
+                """Run waterfall with modified inputs."""
+                freq = PF.SEMESTRIAL if inputs_mod.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
+                engine_mod = PeriodEngine(
+                    financial_close=inputs_mod.info.financial_close,
+                    construction_months=inputs_mod.info.construction_months,
+                    horizon_years=inputs_mod.info.horizon_years,
+                    ppa_years=inputs_mod.revenue.ppa_term_years,
+                    frequency=freq,
+                )
+                return cached_run_waterfall_v3(
+                    inputs=inputs_mod, engine=engine_mod,
+                    rate_per_period=rate, tenor_periods=tenor_periods,
+                    target_dscr=debt_config.senior.target_dscr,
+                    lockup_dscr=debt_config.senior.min_dscr_lockup,
+                    tax_rate=tax_config.corporate_tax_rate,
+                    dsra_months=debt_config.senior.dsra_months,
+                    shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
+                    shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
+                    discount_rate_project=0.0641,
+                    discount_rate_equity=0.0965,
+                    rate_schedule=rate_schedule,
+                )
             
             # Run base case
-            base_result = cached_run_waterfall_v3(
-                inputs=inputs, engine=engine,
-                rate_per_period=rate, tenor_periods=tenor_periods,
-                target_dscr=debt_config.senior.target_dscr,
-                lockup_dscr=debt_config.senior.min_dscr_lockup,
-                tax_rate=tax_config.corporate_tax_rate,
-                dsra_months=debt_config.senior.dsra_months,
-                shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
-                shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
-                discount_rate_project=0.0641,
-                discount_rate_equity=0.0965,
-            )
+            with st.spinner("Running base case waterfall..."):
+                base_result = compute_waterfall(inputs)
             base_irr = base_result.project_irr
             base_dscr = base_result.avg_dscr
             
-            # Define sensitivity variables
-            def make_irr_fn(var_name, shock_fn):
-                def fn(val):
-                    inputs_mod = inputs
-                    return {"IRR": shock_fn(inputs_mod, val).project_irr}
-                return fn
+            # Define sensitivity variables and ranges
+            sensitivity_vars = [
+                {"name": "PPA Tariff", "base_mult": 1.0, "range": (0.75, 1.30), "steps": 7, "unit": "x"},
+                {"name": "Generation", "base_mult": 1.0, "range": (0.80, 1.20), "steps": 5, "unit": "x"},
+                {"name": "Interest Rate", "base_mult": 0.0, "range": (-150, 150), "steps": 7, "unit": "bps"},
+                {"name": "CAPEX", "base_mult": 1.0, "range": (0.85, 1.20), "steps": 5, "unit": "x"},
+            ]
             
-            # Tariff sensitivity: ±30%
-            tariff_vals = [0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2]
-            tariff_revenues = [r * t for r, t in zip(base_result.total_revenue_keur, tariff_vals)]
-            
-            st.info("Sensitivity analysis running... (one-way analysis on key variables)")
-            
-            # Build tornado data manually for key variables
             tornado_data = []
+            progress_bar = st.progress(0, text="Running sensitivity analysis...")
+            total_steps = sum(v["steps"] for v in sensitivity_vars)
+            completed = 0
             
-            # Tariff impact (placeholder — would need full re-run)
-            low_tariff = base_irr * 0.85
-            high_tariff = base_irr * 1.10
-            tornado_data.append({"name": "PPA Tariff", "low": low_tariff - base_irr, "high": high_tariff - base_irr})
+            for var in sensitivity_vars:
+                var_name = var["name"]
+                var_values = []
+                irr_values = []
+                
+                if var_name == "PPA Tariff":
+                    # Tariff multiplier: scale ppa_base_price
+                    base_tariff = inputs.revenue.ppa_base_price_eur_mwh
+                    for step in range(var["steps"]):
+                        mult = var["range"][0] + step * (var["range"][1] - var["range"][0]) / (var["steps"] - 1)
+                        inputs_mod = replace(inputs, revenue=replace(inputs.revenue, ppa_base_price_eur_mwh=base_tariff * mult))
+                        result = compute_waterfall(inputs_mod)
+                        var_values.append(mult)
+                        irr_values.append(result.project_irr)
+                        completed += 1
+                        progress_bar.progress(completed / total_steps, text=f"{var_name}: {mult:.2f}x")
+                        
+                elif var_name == "Generation":
+                    # Generation: scale wind_capacity_factor
+                    base_gen = inputs.generation.wind_capacity_factor
+                    for step in range(var["steps"]):
+                        mult = var["range"][0] + step * (var["range"][1] - var["range"][0]) / (var["steps"] - 1)
+                        inputs_mod = replace(inputs, generation=replace(inputs.generation, wind_capacity_factor=base_gen * mult))
+                        result = compute_waterfall(inputs_mod)
+                        var_values.append(mult)
+                        irr_values.append(result.project_irr)
+                        completed += 1
+                        progress_bar.progress(completed / total_steps, text=f"{var_name}: {mult:.2f}x")
+                        
+                elif var_name == "Interest Rate":
+                    # Rate: add/subtract bps from all_in_rate
+                    base_rate_val = debt_config.senior.all_in_rate
+                    rate_schedule_mod = build_rate_schedule(
+                        base_rate_type="FLAT",
+                        tenor_periods=tenor_periods, periods_per_year=2,
+                        base_rate_override=base_rate_val / 2,
+                        floating_share=debt_config.senior.floating_share,
+                        fixed_share=debt_config.senior.fixed_share,
+                        hedge_coverage=debt_config.senior.hedged_share,
+                        margin_bps=debt_config.senior.margin_bps + int(var["range"][0]),  # will be updated per step
+                        base_rate_floor=debt_config.senior.base_rate_floor,
+                    )
+                    for step in range(var["steps"]):
+                        bps_offset = var["range"][0] + step * (var["range"][1] - var["range"][0]) / (var["steps"] - 1)
+                        new_margin = max(0, debt_config.senior.margin_bps + int(bps_offset))
+                        rate_sched = build_rate_schedule(
+                            base_rate_type="FLAT",
+                            tenor_periods=tenor_periods, periods_per_year=2,
+                            base_rate_override=base_rate_val / 2,
+                            floating_share=debt_config.senior.floating_share,
+                            fixed_share=debt_config.senior.fixed_share,
+                            hedge_coverage=debt_config.senior.hedged_share,
+                            margin_bps=new_margin,
+                            base_rate_floor=debt_config.senior.base_rate_floor,
+                        )
+                        freq = PF.SEMESTRIAL if inputs.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
+                        engine_mod = PeriodEngine(
+                            financial_close=inputs.info.financial_close,
+                            construction_months=inputs.info.construction_months,
+                            horizon_years=inputs.info.horizon_years,
+                            ppa_years=inputs.revenue.ppa_term_years,
+                            frequency=freq,
+                        )
+                        result = cached_run_waterfall_v3(
+                            inputs=inputs, engine=engine_mod,
+                            rate_per_period=rate, tenor_periods=tenor_periods,
+                            target_dscr=debt_config.senior.target_dscr,
+                            lockup_dscr=debt_config.senior.min_dscr_lockup,
+                            tax_rate=tax_config.corporate_tax_rate,
+                            dsra_months=debt_config.senior.dsra_months,
+                            shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
+                            shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
+                            discount_rate_project=0.0641,
+                            discount_rate_equity=0.0965,
+                            rate_schedule=rate_sched,
+                        )
+                        var_values.append(bps_offset)
+                        irr_values.append(result.project_irr)
+                        completed += 1
+                        progress_bar.progress(completed / total_steps, text=f"{var_name}: {bps_offset:+.0f}bps")
+                        
+                elif var_name == "CAPEX":
+                    # CAPEX: scale total_capex
+                    base_capex = inputs.investment.total_capex_keur
+                    for step in range(var["steps"]):
+                        mult = var["range"][0] + step * (var["range"][1] - var["range"][0]) / (var["steps" - 1])
+                        inputs_mod = replace(inputs, investment=replace(inputs.investment, total_capex_keur=base_capex * mult))
+                        result = compute_waterfall(inputs_mod)
+                        var_values.append(mult)
+                        irr_values.append(result.project_irr)
+                        completed += 1
+                        progress_bar.progress(completed / total_steps, text=f"{var_name}: {mult:.2f}x")
+                
+                # Find low/high IRR values
+                irr_low = min(irr_values)
+                irr_high = max(irr_values)
+                idx_low = irr_values.index(irr_low)
+                idx_high = irr_values.index(irr_high)
+                
+                tornado_data.append({
+                    "name": var_name,
+                    "low": irr_low - base_irr,
+                    "high": irr_high - base_irr,
+                    "base_value": var["base_mult"],
+                    "unit": var["unit"],
+                })
             
-            # Generation impact
-            low_gen = base_irr * 0.90
-            high_gen = base_irr * 1.08
-            tornado_data.append({"name": "Generation", "low": low_gen - base_irr, "high": high_gen - base_irr})
+            progress_bar.empty()
             
-            # Rate shock impact
-            low_rate = base_irr * 0.95
-            high_rate = base_irr * 1.05
-            tornado_data.append({"name": "Interest Rate", "low": low_rate - base_irr, "high": high_rate - base_irr})
-            
-            # CAPEX impact
-            low_capex = base_irr * 0.97
-            high_capex = base_irr * 1.03
-            tornado_data.append({"name": "CAPEX", "low": low_capex - base_irr, "high": high_capex - base_irr})
-            
-            # Sort by magnitude
+            # Sort by max absolute impact
             tornado_data.sort(key=lambda x: max(abs(x["low"]), abs(x["high"])), reverse=True)
             
             # Render tornado chart
             fig = go.Figure()
             names = [d["name"] for d in tornado_data]
-            lows = [-d["low"] * 100 for d in tornado_data]  # Negate for left bars
+            # Negative = IRR decreases (left side, red)
+            # Positive = IRR increases (right side, green)
+            lows = [-d["low"] * 100 for d in tornado_data]  # Negate: low impact → left bar
             highs = [d["high"] * 100 for d in tornado_data]
             
-            fig.add_trace(go.Bar(name="Negative", x=lows, y=names, orientation="h", marker_color="#d32f2f"))
-            fig.add_trace(go.Bar(name="Positive", x=highs, y=names, orientation="h", marker_color="#388e3c"))
+            fig.add_trace(go.Bar(
+                name="IRR Decrease", x=lows, y=names, orientation="h",
+                marker_color="#d32f2f", hovertemplate="%{x:.2f}%<extra></extra>"
+            ))
+            fig.add_trace(go.Bar(
+                name="IRR Increase", x=highs, y=names, orientation="h",
+                marker_color="#388e3c", hovertemplate="%{x:.2f}%<extra></extra>"
+            ))
             
             fig.update_layout(
-                title={"text": f"Project IRR Sensitivity (Base: {base_irr*100:.2f}%)"},
+                title={"text": f"Project IRR Sensitivity (Base: {base_irr*100:.2f}%)", "font": {"size": 14}},
                 barmode="relative",
-                height=350,
+                height=320,
                 xaxis_title="IRR Impact (%)",
-                showlegend=False,
+                showlegend=True,
+                legend={"orientation": "h", "y": -0.2, "x": 0.5, "xanchor": "center"},
+                margin={"t": 50, "b": 60},
             )
             st.plotly_chart(fig, config=CHART_CONFIG)
             
-            st.caption("Note: Full one-way sensitivity requires full waterfall re-computation per variable step.")
+            # Show summary table
+            st.markdown("##### Sensitivity Summary")
+            summary_rows = []
+            for d in tornado_data:
+                summary_rows.append({
+                    "Variable": d["name"],
+                    "Base IRR": f"{base_irr*100:.2f}%",
+                    "Low": f"{(base_irr + d['low'])*100:.2f}%",
+                    "High": f"{(base_irr + d['high'])*100:.2f}%",
+                    "Δ IRR": f"{d['high']*100:+.2f}% / {d['low']*100:+.2f}%",
+                })
+            st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+            
+            st.caption(f"Sensitivity analysis complete. Base case: {base_irr*100:.3f}% IRR, {base_dscr:.3f}x Avg DSCR.")
             
         except Exception as e:
             st.error(f"Sensitivity analysis failed: {str(e)}")
-    
+            import traceback
+            st.code(traceback.format_exc())
+
     with tab_tax:
         st.subheader("Tax Parameters")
         
