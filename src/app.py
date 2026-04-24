@@ -1206,7 +1206,11 @@ def main():
                 base_rate_type=debt_config.senior.base_rate_type,
                 tenor_periods=tenor_periods,
                 periods_per_year=2,
-                base_rate_override=debt_config.senior.base_rate if debt_config.senior.base_rate_type == "FIXED" else None,
+                base_rate_override=(
+                    debt_config.senior.all_in_rate / 2 if debt_config.senior.base_rate_type == "FLAT" else
+                    debt_config.senior.base_rate if debt_config.senior.base_rate_type not in ["FLAT", "EURIBOR_1M", "EURIBOR_3M", "EURIBOR_6M"] else
+                    None  # EURIBOR modes use curve
+                ),
                 floating_share=debt_config.senior.floating_share,
                 fixed_share=debt_config.senior.fixed_share,
                 hedge_coverage=debt_config.senior.hedged_share,
@@ -1375,7 +1379,11 @@ def main():
                     base_rate_type=debt_config.senior.base_rate_type,
                     tenor_periods=tenor_periods,
                     periods_per_year=2,
-                    base_rate_override=debt_config.senior.base_rate if debt_config.senior.base_rate_type == "FIXED" else None,
+                    base_rate_override=(
+                    debt_config.senior.all_in_rate / 2 if debt_config.senior.base_rate_type == "FLAT" else
+                    debt_config.senior.base_rate if debt_config.senior.base_rate_type not in ["FLAT", "EURIBOR_1M", "EURIBOR_3M", "EURIBOR_6M"] else
+                    None  # EURIBOR modes use curve
+                ),
                     floating_share=debt_config.senior.floating_share,
                     fixed_share=debt_config.senior.fixed_share,
                     hedge_coverage=debt_config.senior.hedged_share,
@@ -1465,7 +1473,11 @@ def main():
                     base_rate_type=debt_config.senior.base_rate_type,
                     tenor_periods=tenor_periods,
                     periods_per_year=2,
-                    base_rate_override=debt_config.senior.base_rate if debt_config.senior.base_rate_type == "FIXED" else None,
+                    base_rate_override=(
+                    debt_config.senior.all_in_rate / 2 if debt_config.senior.base_rate_type == "FLAT" else
+                    debt_config.senior.base_rate if debt_config.senior.base_rate_type not in ["FLAT", "EURIBOR_1M", "EURIBOR_3M", "EURIBOR_6M"] else
+                    None  # EURIBOR modes use curve
+                ),
                     floating_share=debt_config.senior.floating_share,
                     fixed_share=debt_config.senior.fixed_share,
                     hedge_coverage=debt_config.senior.hedged_share,
@@ -1589,7 +1601,11 @@ def main():
                     base_rate_type=debt_config.senior.base_rate_type,
                     tenor_periods=tenor_periods,
                     periods_per_year=2,
-                    base_rate_override=debt_config.senior.base_rate if debt_config.senior.base_rate_type == "FIXED" else None,
+                    base_rate_override=(
+                    debt_config.senior.all_in_rate / 2 if debt_config.senior.base_rate_type == "FLAT" else
+                    debt_config.senior.base_rate if debt_config.senior.base_rate_type not in ["FLAT", "EURIBOR_1M", "EURIBOR_3M", "EURIBOR_6M"] else
+                    None  # EURIBOR modes use curve
+                ),
                     floating_share=debt_config.senior.floating_share,
                     fixed_share=debt_config.senior.fixed_share,
                     hedge_coverage=debt_config.senior.hedged_share,
@@ -1713,7 +1729,11 @@ def main():
                     base_rate_type=debt_config.senior.base_rate_type,
                     tenor_periods=tenor_periods,
                     periods_per_year=2,
-                    base_rate_override=debt_config.senior.base_rate if debt_config.senior.base_rate_type == "FIXED" else None,
+                    base_rate_override=(
+                    debt_config.senior.all_in_rate / 2 if debt_config.senior.base_rate_type == "FLAT" else
+                    debt_config.senior.base_rate if debt_config.senior.base_rate_type not in ["FLAT", "EURIBOR_1M", "EURIBOR_3M", "EURIBOR_6M"] else
+                    None  # EURIBOR modes use curve
+                ),
                     floating_share=debt_config.senior.floating_share,
                     fixed_share=debt_config.senior.fixed_share,
                     hedge_coverage=debt_config.senior.hedged_share,
@@ -1772,6 +1792,60 @@ def main():
         except Exception as e:
             st.error(f"Waterfall calculation failed: {str(e)}")
             st.info("Configure technology, revenue, and debt in the sidebar to run waterfall.")
+            
+            # Export buttons
+            st.markdown("---")
+            st.markdown("##### 📥 Export Data")
+            col_exp1, col_exp2 = st.columns(2)
+            with col_exp1:
+                # CSV: waterfall period data
+                csv_data = []
+                for p in result.periods:
+                    csv_data.append({
+                        "Period": p.period,
+                        "Year": p.year_index,
+                        "Gen (MWh)": round(p.generation_mwh, 0),
+                        "Rev (kEUR)": round(p.revenue_keur, 0),
+                        "EBITDA (kEUR)": round(p.ebitda_keur, 0),
+                        "CFAT (kEUR)": round(p.cf_after_tax_keur, 0),
+                        "Sen DS (kEUR)": round(p.senior_ds_keur, 0),
+                        "DSCR": round(p.dscr, 2) if p.dscr < float('inf') else 999,
+                        "Dist (kEUR)": round(p.distribution_keur, 0),
+                        "Sweep (kEUR)": round(p.cash_sweep_keur, 0),
+                    })
+                import pandas as pd
+                df_waterfall = pd.DataFrame(csv_data)
+                csv_waterfall = df_waterfall.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📊 Download Waterfall (CSV)",
+                    data=csv_waterfall,
+                    file_name="waterfall.csv",
+                    mime="text/csv",
+                    help="Download period-level waterfall data",
+                )
+            with col_exp2:
+                # CSV: summary metrics
+                summary_data = {
+                    "Metric": ["Project IRR", "Equity IRR", "Avg DSCR", "Min DSCR",
+                               "Debt (kEUR)", "Total Distribution (kEUR)", "Total Tax (kEUR)",
+                               "Total Senior DS (kEUR)"],
+                    "Value": [f"{result.project_irr*100:.2f}%", 
+                              f"{result.equity_irr*100:.2f}%" if result.equity_irr else "N/A",
+                              f"{result.avg_dscr:.3f}", f"{result.min_dscr:.3f}",
+                              f"{result.sculpting_result.debt_keur:,.0f}",
+                              f"{result.total_distribution_keur:,.0f}",
+                              f"{result.total_tax_keur:,.0f}",
+                              f"{result.total_senior_ds_keur:,.0f}"],
+                }
+                df_summary = pd.DataFrame(summary_data)
+                csv_summary = df_summary.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📋 Download Summary (CSV)",
+                    data=csv_summary,
+                    file_name="waterfall_summary.csv",
+                    mime="text/csv",
+                    help="Download summary metrics",
+                )
     
     with tab_sensitivity:
         st.subheader("📉 Sensitivity Analysis — Tornado Chart")
