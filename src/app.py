@@ -678,10 +678,20 @@ def render_debt_config() -> DebtConfig:
         )
     
     with col2:
+        base_rate_type = st.selectbox(
+            "Base Rate Type",
+            ["EURIBOR_6M", "EURIBOR_3M", "FIXED"],
+            index=0,
+            help="Euribor type for floating debt pricing",
+        )
         base_rate = st.number_input(
             "Base Rate (%)",
             0.0, 15.0, 3.0, step=0.1
         ) / 100
+        if base_rate_type == "FIXED":
+            st.caption("Fixed rate — Euribor curve not used")
+        else:
+            st.caption(f"{base_rate_type} — will use curve for forward rates")
         margin = st.number_input(
             "Margin (bps)",
             0, 1000, 265, step=5
@@ -1049,6 +1059,27 @@ def main():
             st.session_state.selected_scenarios = selected_scenarios
         elif len(selected_scenarios) == 1:
             st.session_state.selected_scenarios = selected_scenarios
+        
+        # === SPRINT 4: Sensitivity Analysis ===
+        st.subheader("📉 Sensitivity Analysis")
+        sensitivity_enabled = st.checkbox("Enable Sensitivity Analysis", value=False)
+        
+        if sensitivity_enabled:
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                shock_tariff = st.slider("PPA Tariff Shock (±%)", 0, 30, 0, step=5) / 100
+                shock_rate = st.slider("Interest Rate Shock (±bps)", 0, 200, 0, step=10)
+            with col_s2:
+                shock_gen = st.slider("Generation Shock (±%)", 0, 30, 0, step=5) / 100
+                shock_capex = st.slider("CAPEX Shock (±%)", 0, 30, 0, step=5) / 100
+            
+            if any(s > 0 for s in [shock_tariff, shock_rate, shock_gen, shock_capex]):
+                st.session_state.sensitivity_shocks = {
+                    "tariff": shock_tariff,
+                    "rate": shock_rate,
+                    "generation": shock_gen,
+                    "capex": shock_capex,
+                }
     
     # Main content area - tabs
     tab_overview, tab_generation, tab_revenue, tab_debt, tab_pl, tab_bs, tab_cf, tab_waterfall, tab_tax, tab_regulatory, tab_validation = st.tabs([
