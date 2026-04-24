@@ -1399,13 +1399,18 @@ def main():
                 if p.year_index > 0 and p.year_index <= horizon:
                     cum_debt_repaid += p.senior_principal_keur
                     cum_net_income += max(0, p.cf_after_tax_keur - p.senior_ds_keur - p.shl_service_keur)
-                    cash_balance += p.distribution_keur
+                    # Use waterfall's cash_balance_keur (H2 end-of-year value)
+                    # This is the actual cumulative cash position after distributions
+                    waterfall_cash = p.cash_balance_keur if hasattr(p, 'cash_balance_keur') else 0
+                    cash_balance = waterfall_cash
                     
                     # Calculate period values
                     remaining_debt = max(0, senior_debt_initial - cum_debt_repaid)
                     fixed_assets = total_capex - (total_capex / horizon * p.year_index)
-                    total_assets = fixed_assets + max(0, cash_balance)
-                    equity = initial_equity + cum_net_income - cum_debt_repaid
+                    # Assets = Fixed Assets + DSRA + Cash (from waterfall)
+                    dsra_balance = getattr(p, 'dsra_balance_keur', 0)
+                    total_assets = fixed_assets + max(0, dsra_balance) + max(0, cash_balance)
+                    equity = total_assets - remaining_debt - (debt_config.shl.shl_keur if debt_config.shl else 0)
                     
                     bs_data.append({
                         "Year": p.year_index,

@@ -406,13 +406,12 @@ def run_waterfall(
         # Cash balance
         cash_balance = cash_balance + cf_after_reserves - dist
         
-        # LLCR/PLCR
-        remaining_fcf = ebitda_schedule[i:]
-        remaining_balance = balance_schedule[period_in_tenor] if period_in_tenor < len(balance_schedule) else 0
-        
+        # LLCR/PLCR — operation-relative: remaining FCF from current op period
+        remaining_fcf = ebitda_schedule[op_period_counter:]
+        balance_idx = period_in_tenor + 1 if period_in_tenor + 1 < len(balance_schedule) else period_in_tenor
+        remaining_balance = balance_schedule[balance_idx] if balance_schedule else 0
         llcr_val = compute_llcr(remaining_fcf, remaining_balance, rate_per_period, tenor_periods - period_in_tenor)
-        plcr_val = compute_plcr(remaining_fcf, remaining_balance, rate_per_period, len(ebitda_schedule) - i)
-        
+        plcr_val = compute_plcr(remaining_fcf, remaining_balance, rate_per_period, len(remaining_fcf))
         wp = WaterfallPeriod(
             period=period.index,
             date=period.end_date,
@@ -453,7 +452,8 @@ def run_waterfall(
         waterfall_periods.append(wp)
         
         # Track CFs for returns
-        project_cfs.append(cf_after_tax - senior_ds)
+        # Project IRR = unlevered (EBITDA - Tax), equity IRR = levered (distributions)
+        project_cfs.append(ebitda - tax_this_period if ebitda else 0)
         equity_cfs.append(dist)
     
     # Calculate returns - prepend financial_close date for initial investment
