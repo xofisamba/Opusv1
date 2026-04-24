@@ -24,6 +24,7 @@ from domain.financing.sculpting_iterative import (
     iterative_sculpt_debt, IterativeSculptResult,
     closed_form_sculpt, ClosedFormSculptResult,
     dsra_rolling_target, dsra_update,
+    cash_sweep,
 )
 from domain.financing.schedule import senior_debt_amount
 from domain.returns.xirr import xirr, xnpv
