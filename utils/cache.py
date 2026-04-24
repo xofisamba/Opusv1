@@ -445,4 +445,7 @@ def cached_run_waterfall_v3(
         gearing_ratio=inputs.financing.gearing_ratio,
         fixed_debt_keur=fixed_debt_keur,
         rate_schedule=rate_schedule,
+        idc_keur=inputs.capex.idc_keur,
+        bank_fees_keur=inputs.capex.bank_fees_keur,
+        commitment_fees_keur=inputs.capex.commitment_fees_keur,
     )

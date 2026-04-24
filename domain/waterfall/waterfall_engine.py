@@ -211,6 +211,10 @@ def run_waterfall(
     gearing_ratio: float = 0.80,  # Used for sizing cap in closed_form_sculpt
     fixed_debt_keur: float | None = None,  # Override sculpted debt (for P90 sizing scenarios)
     rate_schedule: list[float] | None = None,  # Per-period rate schedule (Euribor curve). If None, uses flat rate_per_period.
+    # Fiscal reintegration components (IDC + bank fees + commitment fees during construction)
+    idc_keur: float = 0.0,
+    bank_fees_keur: float = 0.0,
+    commitment_fees_keur: float = 0.0,
 ) -> WaterfallResult:
     """Run full waterfall with iterative debt sculpting.
 
@@ -408,11 +412,7 @@ def run_waterfall(
         # construction, added back to taxable profit in first year of operation
         # (HR tax law — only once in first operational year)
         if not fiscal_reintegration_applied:
-            fiscal_reintegration = (
-                inputs.capex.idc_keur
-                + inputs.capex.bank_fees_keur
-                + inputs.capex.commitment_fees_keur
-            )
+            fiscal_reintegration = idc_keur + bank_fees_keur + commitment_fees_keur
             fiscal_reintegration_applied = True
         else:
             fiscal_reintegration = 0.0
@@ -725,4 +725,7 @@ def cached_run_waterfall(
         discount_rate_project=discount_rate_project,
         discount_rate_equity=discount_rate_equity,
         financial_close=inputs.info.financial_close,
+        idc_keur=inputs.capex.idc_keur,
+        bank_fees_keur=inputs.capex.bank_fees_keur,
+        commitment_fees_keur=inputs.capex.commitment_fees_keur,
     )
