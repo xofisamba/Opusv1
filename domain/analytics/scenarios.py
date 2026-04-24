@@ -65,61 +65,99 @@ def get_scenario_hours(
     return tech.operating_hours_p50
 
 
+def _inputs_for_scenario(base_inputs: ProjectInputs, scenario: YieldScenario) -> ProjectInputs:
+    """Create scenario-specific ProjectInputs by adjusting yield scenario hours.
+    
+    This is needed because cached_run_waterfall_v3 builds generation schedule
+    from inputs.technical.operating_hours_p50. For P90 scenario, we need
+    P90 hours as the "P50" hours in the inputs.
+    
+    Args:
+        base_inputs: Base ProjectInputs (from UI)
+        scenario: Target scenario
+    
+    Returns:
+        ProjectInputs with scenario-specific operating hours
+    """
+    from dataclasses import replace
+    hours = get_scenario_hours(base_inputs, scenario)
+    scenario_name_map = {
+        YieldScenario.P50: "P_50",
+        YieldScenario.P90_1Y: "P90_1Y",
+        YieldScenario.P90_10Y: "P90_10Y",
+        YieldScenario.P99_1Y: "P99_1Y",
+    }
+    scenario_name = scenario_name_map.get(scenario, "P_50")
+    return replace(
+        base_inputs,
+        technical=replace(
+            base_inputs.technical,
+            yield_scenario=scenario_name,
+            operating_hours_p50=hours,
+        ),
+    )
+
+
 def run_scenario(
     inputs: ProjectInputs,
     scenario: YieldScenario,
-    waterfall_result,  # WaterfallResult from cached_run_waterfall_v3
+    run_waterfall_fn,
+    fixed_debt_keur: float | None = None,
 ) -> ScenarioResult:
-    """Extract scenario metrics from waterfall result.
+    """Run waterfall for a specific scenario with optional fixed debt.
     
-    Note: Since waterfall uses P50 generation, we scale generation
-    proportionally for P90/P99 scenarios.
+    If fixed_debt_keur is provided, debt is NOT re-sized — the same
+    P90-sized debt is used for all scenarios (bank standard).
     
     Args:
-        inputs: ProjectInputs (used for hours extraction)
+        inputs: ProjectInputs (scenario-specific hours are applied)
         scenario: Scenario to run
-        waterfall_result: WaterfallResult with P50 baseline
+        run_waterfall_fn: Callable that runs the waterfall (from cached_run_waterfall_v3)
+        fixed_debt_keur: Optional fixed debt amount (from P90 sizing run)
     
     Returns:
         ScenarioResult with scenario-specific metrics
     """
-    p50_hours = inputs.technical.operating_hours_p50
-    scenario_hours = get_scenario_hours(inputs, scenario)
+    # Run waterfall for this scenario (with or without fixed debt)
+    result = run_waterfall_fn(
+        inputs=inputs,
+        fixed_debt_keur=fixed_debt_keur,
+    )
     
-    # Generation scale factor (P90/P99 vs P50)
-    gen_scale = scenario_hours / p50_hours if p50_hours > 0 else 1.0
-    
-    # Use waterfall IRR/NPV directly (not scaled by generation for returns)
-    # Equity IRR/Project IRR are dimensionless ratios, not affected by scale
-    # But generation scaling affects total revenue/cash flow
-    total_gen = sum(p.generation_mwh for p in waterfall_result.periods if p.is_operation)
-    scaled_gen = total_gen * gen_scale
-    
-    # Revenue scaling
-    total_rev = sum(p.revenue_keur for p in waterfall_result.periods if p.is_operation)
-    scaled_rev = total_rev * gen_scale
-    
-    # Scale distributions and taxes proportionally
-    scaled_dist = waterfall_result.total_distribution_keur * gen_scale
-    scaled_tax = waterfall_result.total_tax_keur * gen_scale
-    
-    # LCOE adjusted for scenario (higher/lower generation = lower/higher LCOE)
-    lcoe_base = _compute_lcoe_from_waterfall(waterfall_result, inputs)
-    lcoe_adj = lcoe_base / gen_scale if gen_scale > 0 else lcoe_base
+    # Compute LCOE
+    lcoe = _compute_lcoe_from_waterfall(result, inputs)
     
     return ScenarioResult(
         scenario=scenario,
-        equity_irr=waterfall_result.equity_irr,
-        project_irr=waterfall_result.project_irr,
-        npv_keur=int(waterfall_result.project_npv),
-        lcoe_eur_mwh=round(lcoe_adj, 2),
-        avg_dscr=waterfall_result.avg_dscr,
-        min_dscr=waterfall_result.min_dscr,
-        total_distribution_keur=int(scaled_dist),
-        total_tax_keur=int(scaled_tax),
-        generation_mwh_y1=int(scaled_gen * 0.035),  # ~3.5% of total is Y1
-        revenue_keur_y1=int(scaled_rev * 0.035),
+        equity_irr=result.equity_irr,
+        project_irr=result.project_irr,
+        npv_keur=int(result.project_npv),
+        lcoe_eur_mwh=round(lcoe, 2),
+        avg_dscr=result.avg_dscr,
+        min_dscr=result.min_dscr,
+        total_distribution_keur=int(result.total_distribution_keur),
+        total_tax_keur=int(result.total_tax_keur),
+        generation_mwh_y1=_get_y1_generation(result),
+        revenue_keur_y1=_get_y1_revenue(result),
     )
+
+
+def _get_y1_generation(result) -> int:
+    """Extract Y1 generation from waterfall result."""
+    for p in result.periods:
+        if p.is_operation and p.year_index == 1:
+            return int(p.generation_mwh * 2)  # H1 * 2 ≈ Y1
+    total_gen = sum(p.generation_mwh for p in result.periods if p.is_operation)
+    return int(total_gen * 0.035)
+
+
+def _get_y1_revenue(result) -> int:
+    """Extract Y1 revenue from waterfall result."""
+    for p in result.periods:
+        if p.is_operation and p.year_index == 1:
+            return int(p.revenue_keur * 2)  # H1 * 2 ≈ Y1
+    total_rev = sum(p.revenue_keur for p in result.periods if p.is_operation)
+    return int(total_rev * 0.035)
 
 
 def _compute_lcoe_from_waterfall(result, inputs) -> float:

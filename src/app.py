@@ -35,7 +35,7 @@ from utils.ui_constants import CHART_CONFIG
 from utils.financial import format_keur, format_pct, format_multiple
 from domain.analytics.scenarios import (
     YieldScenario, get_scenario_hours, run_scenario, compare_scenarios,
-    ScenarioResult,
+    ScenarioResult, _inputs_for_scenario,
 )
 from domain.reporting.financial_statements import (
     build_income_statement, build_balance_sheet,
@@ -1191,18 +1191,19 @@ def main():
         else:
             st.success("✅ Configuration is valid")
         
-        # === SPRINT 3: Scenario Comparison Table ===
+        # === Scenario Comparison (P90 debt sizing) ===
         if selected_scenarios and len(selected_scenarios) > 1:
             inputs = _get_inputs_from_session()
             engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
             
-            with st.spinner("Running scenario comparison..."):
-                # Run waterfall once (P50 baseline)
+            with st.spinner("Running P90 sizing..."):
                 try:
-                    base_result = cached_run_waterfall_v3(
-                        inputs=inputs, engine=engine,
+                    # Step 1: P90-10Y sizing run — determine fixed debt
+                    p90_inputs = _inputs_for_scenario(inputs, YieldScenario.P90_10Y)
+                    p90_result = cached_run_waterfall_v3(
+                        inputs=p90_inputs, engine=engine,
                         rate_per_period=rate, tenor_periods=tenor_periods,
                         target_dscr=debt_config.senior.target_dscr,
                         lockup_dscr=debt_config.senior.min_dscr_lockup,
@@ -1211,7 +1212,24 @@ def main():
                         shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                         shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
                         discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                        fixed_debt_keur=None,  # Let it size for P90
                     )
+                    fixed_debt_keur = p90_result.sculpting_result.debt_keur if hasattr(p90_result, 'sculpting_result') else p90_result.debt_keur
+                    
+                    # Create partial function for scenario runs
+                    def run_fn(inputs=inputs, fixed_debt_keur=fixed_debt_keur):
+                        return cached_run_waterfall_v3(
+                            inputs=inputs, engine=engine,
+                            rate_per_period=rate, tenor_periods=tenor_periods,
+                            target_dscr=debt_config.senior.target_dscr,
+                            lockup_dscr=debt_config.senior.min_dscr_lockup,
+                            tax_rate=inputs.tax.corporate_rate,
+                            dsra_months=debt_config.senior.dsra_months,
+                            shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
+                            shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
+                            discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                            fixed_debt_keur=fixed_debt_keur,
+                        )
                     
                     # Build scenario results
                     scenario_map = {
@@ -1224,12 +1242,14 @@ def main():
                     for scen in selected_scenarios:
                         yld = scenario_map.get(scen)
                         if yld:
-                            r = run_scenario(inputs, yld, base_result)
+                            scen_inputs = _inputs_for_scenario(inputs, yld)
+                            r = run_scenario(scen_inputs, yld, run_fn, fixed_debt_keur=fixed_debt_keur)
                             results.append(r)
                     
                     comparison = compare_scenarios(results)
                     
-                    st.markdown("### 📊 Scenario Comparison")
+                    st.markdown("### 📊 Scenario Comparison (P90-sized debt)")
+                    st.caption(f"Fixed P90 debt: {fixed_debt_keur:,.0f} kEUR | DSCR target: {debt_config.senior.target_dscr}")
                     st.dataframe(
                         pd.DataFrame({
                             "Scenario": comparison["scenario"],

@@ -206,9 +206,10 @@ def run_waterfall(
     discount_rate_equity: float = 0.0965,
     financial_close: 'date' = None,
     gearing_ratio: float = 0.80,  # Used for sizing cap in closed_form_sculpt
+    fixed_debt_keur: float | None = None,  # Override sculpted debt (for P90 sizing scenarios)
 ) -> WaterfallResult:
     """Run full waterfall with iterative debt sculpting.
-    
+
     Args:
         ebitda_schedule: EBITDA per period
         revenue_schedule: Revenue per period
@@ -226,7 +227,9 @@ def run_waterfall(
         shl_rate: SHL interest rate
         discount_rate_project: Discount rate for project NPV
         discount_rate_equity: Discount rate for equity NPV
-    
+        financial_close: Financial close date
+        gearing_ratio: Gearing ratio cap (CAPEX * gearing_ratio)
+        fixed_debt_keur: If provided, overrides sculpted debt (for P90 sizing)
     Returns:
         WaterfallResult with all periods and metrics
     """
@@ -243,11 +246,37 @@ def run_waterfall(
         gearing_cap_keur=total_capex * gearing_ratio,  # P90 sizing: min(gearing-based, DSCR-based)
     )
     
-    debt = sculpt_result.debt_keur
-    payments = sculpt_result.payment_schedule
-    interest_schedule = sculpt_result.interest_schedule
-    principal_schedule = sculpt_result.principal_schedule
-    balance_schedule = sculpt_result.balance_schedule
+    # If fixed_debt_keur is provided (e.g., from P90 sizing run), override the sculpted debt
+    if fixed_debt_keur is not None and fixed_debt_keur > 0 and sculpt_result.balance_schedule[0] > 0:
+        scale = fixed_debt_keur / sculpt_result.balance_schedule[0]
+        # Scale balance schedule so it starts at fixed_debt_keur
+        balance_schedule = [b * scale for b in sculpt_result.balance_schedule]
+        # Recompute payments based on scaled balances: allowable_ds = fixed_debt / target_dscr
+        allowable_ds_scaled = [fixed_debt_keur / target_dscr] * tenor_periods
+        interest_schedule = [balance_schedule[t] * rate_schedule[t] for t in range(tenor_periods)]
+        principal_schedule = [allowable_ds_scaled[t] - interest_schedule[t] for t in range(tenor_periods)]
+        principal_schedule = [max(0.0, min(p, balance_schedule[t])) for t, p in enumerate(principal_schedule)]
+        payments = [interest_schedule[t] + principal_schedule[t] for t in range(tenor_periods)]
+        debt = fixed_debt_keur
+        # Recompute DSCR schedule
+        dscr_sched_scaled = []
+        for t in range(tenor_periods):
+            dscr = cfads_for_sculpt[t] / payments[t] if payments[t] > 0 else float('inf')
+            dscr_sched_scaled.append(dscr)
+        sculpt_result = sculpt_result._replace(
+            debt_keur=fixed_debt_keur,
+            balance_schedule=balance_schedule,
+            interest_schedule=interest_schedule,
+            principal_schedule=principal_schedule,
+            payment_schedule=payments,
+            dscr_schedule=dscr_sched_scaled,
+        )
+    else:
+        debt = sculpt_result.debt_keur
+        payments = sculpt_result.payment_schedule
+        interest_schedule = sculpt_result.interest_schedule
+        principal_schedule = sculpt_result.principal_schedule
+        balance_schedule = sculpt_result.balance_schedule
     
     # Step 2: Run waterfall for each period
     waterfall_periods = []
