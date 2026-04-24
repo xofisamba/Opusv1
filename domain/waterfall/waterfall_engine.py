@@ -38,6 +38,7 @@ class WaterfallPeriod:
     date: date
     year_index: int
     period_in_year: int  # 1=H1, 2=H2 (for semi-annual model)
+    is_operation: bool  # True if this is an operation period
     # Revenue section
     generation_mwh: float
     revenue_keur: float
@@ -270,6 +271,7 @@ def run_waterfall(
         if not period.is_operation:
             # Construction period: no revenue, just costs
             waterfall_periods.append(WaterfallPeriod(
+                is_operation=False,
                 period=period.index,
                 date=period.end_date,
                 year_index=period.year_index,
@@ -398,6 +400,7 @@ def run_waterfall(
             date=period.end_date,
             year_index=period.year_index,
             period_in_year=period.period_in_year,
+            is_operation=True,
             generation_mwh=gen,
             revenue_keur=rev,
             opex_keur=rev - ebitda,

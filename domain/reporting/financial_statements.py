@@ -196,10 +196,11 @@ def flatten_waterfall(periods) -> list[WaterfallPeriodData]:
     """Flatten waterfall result periods into WaterfallPeriodData list."""
     result = []
     for p in periods:
+        is_op = getattr(p, 'is_operation', p.year_index > 0 if hasattr(p, 'year_index') else False)
         result.append(WaterfallPeriodData(
             year_index=p.year_index,
-            period_in_year=p.period_in_year,
-            is_operation=p.is_operation,
+            period_in_year=getattr(p, 'period_in_year', 1),
+            is_operation=is_op,
             revenue_keur=getattr(p, 'revenue_keur', 0.0),
             opex_keur=getattr(p, 'opex_keur', 0.0),
             ebitda_keur=getattr(p, 'ebitda_keur', 0.0),
