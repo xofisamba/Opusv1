@@ -294,7 +294,7 @@ def run_waterfall(
     waterfall_periods = []
     
     # State variables
-    dsra_balance = dsra_months * (sculpt_result.payment_schedule[0] if sculpt_result.payment_schedule else 0) / 6 if dsra_months > 0 else 0
+    dsra_balance = (dsra_months / 12) * (sculpt_result.payment_schedule[0] * 2) if dsra_months > 0 and sculpt_result.payment_schedule else 0  # noqa: E501  mathematically equivalent to: dsra_months * payment / 6, clearer intent
     mra_balance = 0
     cash_balance = 0
     cum_distribution = 0
