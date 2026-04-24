@@ -195,7 +195,7 @@ def compute_waterfall_cached(
             ebitda_schedule.append(0.0)
         else:
             rev = revenue.get(p.index, 0.0)
-            opex = opex_annual.get(p.year_index, 0.0) * p.day_fraction
+            opex = opex_annual.get(p.year_index, 0.0) / 2  # semi-annual split
             ebitda_schedule.append(rev - opex)
 
     # Build depreciation schedule (equal over horizon)

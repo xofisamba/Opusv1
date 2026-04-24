@@ -16,7 +16,7 @@ Handles:
 - SHL (subordinated hybrid loan)
 - Cash sweep to senior debt
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 from datetime import date
 
@@ -272,7 +272,7 @@ def run_waterfall(
         for t in range(tenor_periods):
             dscr = cfads_for_sculpt[t] / payments[t] if payments[t] > 0 else float('inf')
             dscr_sched_scaled.append(dscr)
-        sculpt_result = sculpt_result._replace(
+        sculpt_result = replace(
             debt_keur=fixed_debt_keur,
             balance_schedule=balance_schedule,
             interest_schedule=interest_schedule,
@@ -449,30 +449,27 @@ def run_waterfall(
         if lockup:
             lockup_count += 1
         
-        # Distribution (after lockup check)
-        if lockup:
-            dist = 0
-        else:
-            dist = max(0, cf_after_reserves)
-        
-        cum_distribution += dist
-        
-        # Cash sweep — excess CFADS goes to early debt repayment (bank standard)
-        # Activated when DSCR > 1.35
+        # Distribution (after lockup check and cash sweep)
+        # Single update to cum_distribution — no double-counting
         sweep_dscr_threshold = 1.35
         remaining_debt_balance = balance_schedule[period_in_tenor] if period_in_tenor < len(balance_schedule) else 0
-        if remaining_debt_balance > 0 and dscr > sweep_dscr_threshold:
-            dist_after_sweep, sweep_amount = cash_sweep(
+        
+        if lockup:
+            dist = 0
+            sweep_amount = 0.0
+        elif remaining_debt_balance > 0 and dscr > sweep_dscr_threshold:
+            dist, sweep_amount = cash_sweep(
                 cf_after_reserves=cf_after_reserves,
                 senior_debt_balance=remaining_debt_balance,
                 sweep_dscr=sweep_dscr_threshold,
                 actual_dscr=dscr,
                 sweep_pct=1.0,  # 100% sweep
             )
-            dist = dist_after_sweep
-            cum_distribution += dist  # Update cum after sweep
         else:
+            dist = max(0, cf_after_reserves)
             sweep_amount = 0.0
+        
+        cum_distribution += dist  # jednom, na kraju svih logika
         
         # Cash balance — after sweep
         cash_balance = cash_balance + cf_after_reserves - dist

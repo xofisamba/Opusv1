@@ -53,6 +53,53 @@ from domain.inputs import ProjectInputs
 # =============================================================================
 # TECHNOLOGY CONFIGURATION UI
 # =============================================================================
+
+
+def _apply_sensitivity_shocks(inputs: ProjectInputs, shocks: dict) -> ProjectInputs:
+    """Apply tariff/generation/CAPEX shocks to inputs.
+    
+    Args:
+        inputs: Base ProjectInputs
+        shocks: dict with keys: tariff, generation, capex (fractions, e.g. 0.2 = +20%)
+    
+    Returns:
+        Modified ProjectInputs with shocked values
+    """
+    if not shocks:
+        return inputs
+    
+    from dataclasses import replace
+    
+    # Tariff shock: scale ppa_base_price
+    shock_tariff = shocks.get('tariff', 0)
+    if shock_tariff != 0:
+        inputs = replace(inputs, revenue=replace(
+            inputs.revenue,
+            ppa_base_price_eur_mwh=inputs.revenue.ppa_base_price_eur_mwh * (1 + shock_tariff)
+        ))
+    
+    # Generation shock: scale capacity_factor
+    shock_gen = shocks.get('generation', 0)
+    if shock_gen != 0:
+        gen = inputs.generation
+        inputs = replace(inputs, generation=replace(
+            gen,
+            wind_capacity_factor=gen.wind_capacity_factor * (1 + shock_gen)
+            if hasattr(gen, 'wind_capacity_factor') else gen.capacity_factor * (1 + shock_gen)
+        ))
+    
+    # CAPEX shock: scale total_capex
+    shock_capex = shocks.get('capex', 0)
+    if shock_capex != 0:
+        capex = inputs.capex
+        inputs = replace(inputs, capex=replace(
+            capex,
+            total_capex_keur=capex.total_capex_keur * (1 + shock_capex)
+        ))
+    
+    return inputs
+
+
 def render_technology_selector() -> Tuple[str, TechnologyConfig]:
     """Render technology selection and return (tech_type, config)."""
     
@@ -1285,7 +1332,7 @@ def main():
                             "Min DSCR": comparison["min_dscr"],
                             "Dist. (kEUR)": comparison["distribution_keur"],
                         }),
-                        width="stretch", hide_index=True,
+                        use_container_width=True, hide_index=True,
                     )
                 except Exception as e:
                     st.warning(f"Scenario comparison: {str(e)}")
@@ -1394,6 +1441,11 @@ def main():
                 if shock_bps > 0:
                     rate_schedule = apply_rate_shock(rate_schedule, int(shock_bps))
 
+                # Apply tariff/gen/capex sensitivity shocks
+                sensitivity_shocks = st.session_state.get("sensitivity_shocks", {})
+                if sensitivity_shocks:
+                    inputs = _apply_sensitivity_shocks(inputs, sensitivity_shocks)
+
                 result = cached_run_waterfall_v3(
                     inputs=inputs, engine=engine,
                     rate_per_period=rate, tenor_periods=tenor_periods,
@@ -1452,7 +1504,7 @@ def main():
             
             if pl_data:
                 df_pl = pd.DataFrame(pl_data)
-                st.dataframe(df_pl.set_index("Year"), width="stretch")
+                st.dataframe(df_pl.set_index("Year"), use_container_width=True)
             else:
                 st.info("No operating periods available yet.")
         except Exception as e:
@@ -1487,6 +1539,11 @@ def main():
                 shock_bps = st.session_state.get("sensitivity_shocks", {}).get("rate", 0)
                 if shock_bps > 0:
                     rate_schedule = apply_rate_shock(rate_schedule, int(shock_bps))
+
+                # Apply tariff/gen/capex sensitivity shocks
+                sensitivity_shocks = st.session_state.get("sensitivity_shocks", {})
+                if sensitivity_shocks:
+                    inputs = _apply_sensitivity_shocks(inputs, sensitivity_shocks)
 
                 result = cached_run_waterfall_v3(
                     inputs=inputs, engine=engine,
@@ -1580,7 +1637,7 @@ def main():
             
             if bs_data:
                 df_bs = pd.DataFrame(bs_data)
-                st.dataframe(df_bs.set_index("Year"), width="stretch")
+                st.dataframe(df_bs.set_index("Year"), use_container_width=True)
             else:
                 st.info("No operating periods available yet.")
         except Exception as e:
@@ -1615,6 +1672,11 @@ def main():
                 shock_bps = st.session_state.get("sensitivity_shocks", {}).get("rate", 0)
                 if shock_bps > 0:
                     rate_schedule = apply_rate_shock(rate_schedule, int(shock_bps))
+
+                # Apply tariff/gen/capex sensitivity shocks
+                sensitivity_shocks = st.session_state.get("sensitivity_shocks", {})
+                if sensitivity_shocks:
+                    inputs = _apply_sensitivity_shocks(inputs, sensitivity_shocks)
 
                 result = cached_run_waterfall_v3(
                     inputs=inputs, engine=engine,
@@ -1707,7 +1769,7 @@ def main():
             
             if cf_data:
                 df_cf = pd.DataFrame(cf_data)
-                st.dataframe(df_cf.set_index("Year"), width="stretch")
+                st.dataframe(df_cf.set_index("Year"), use_container_width=True)
             else:
                 st.info("No operating periods available yet.")
         except Exception as e:
@@ -1743,6 +1805,11 @@ def main():
                 shock_bps = st.session_state.get("sensitivity_shocks", {}).get("rate", 0)
                 if shock_bps > 0:
                     rate_schedule = apply_rate_shock(rate_schedule, int(shock_bps))
+
+                # Apply tariff/gen/capex sensitivity shocks
+                sensitivity_shocks = st.session_state.get("sensitivity_shocks", {})
+                if sensitivity_shocks:
+                    inputs = _apply_sensitivity_shocks(inputs, sensitivity_shocks)
 
                 result = cached_run_waterfall_v3(
                     inputs=inputs,
