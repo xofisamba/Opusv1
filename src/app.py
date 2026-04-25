@@ -823,6 +823,22 @@ def render_debt_config() -> DebtConfig:
             index=0
         )
     
+    # Discount rates for NPV/IRR calculations
+    st.markdown("**Discount Rates**")
+    disc_col1, disc_col2, disc_col3 = st.columns(3)
+    with disc_col1:
+        discount_rate_project = st.number_input(
+            "Project WACC (%)",
+            0.0, 20.0, 6.41, step=0.1
+        ) / 100
+    with disc_col2:
+        discount_rate_equity = st.number_input(
+            "Equity Yield (%)",
+            0.0, 30.0, 9.65, step=0.1
+        ) / 100
+    with disc_col3:
+        st.caption(f"Used for NPV/IRR")
+    
     senior = SeniorDebtParams(
         gearing_ratio=gearing,
         tenor_years=tenor,
@@ -1302,7 +1318,7 @@ def main():
                         dsra_months=debt_config.senior.dsra_months,
                         shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                         shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
-                        discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                        discount_rate_project=discount_rate_project, discount_rate_equity=discount_rate_equity,
                         fixed_debt_keur=None,  # Let it size for P90
                         rate_schedule=rate_schedule,  # Euribor curve
                     )
@@ -1319,7 +1335,7 @@ def main():
                             dsra_months=debt_config.senior.dsra_months,
                             shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                             shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
-                            discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                            discount_rate_project=discount_rate_project, discount_rate_equity=discount_rate_equity,
                             fixed_debt_keur=fixed_debt_keur,
                             rate_schedule=rate_schedule,  # Euribor curve
                         )
@@ -1477,7 +1493,7 @@ def main():
                     dsra_months=debt_config.senior.dsra_months,
                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
-                    discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                    discount_rate_project=discount_rate_project, discount_rate_equity=discount_rate_equity,
                     rate_schedule=rate_schedule,
                 )
             
@@ -1575,7 +1591,7 @@ def main():
                     dsra_months=debt_config.senior.dsra_months,
                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
-                    discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                    discount_rate_project=discount_rate_project, discount_rate_equity=discount_rate_equity,
                     rate_schedule=rate_schedule,
                 )
             
@@ -1710,7 +1726,7 @@ def main():
                     dsra_months=debt_config.senior.dsra_months,
                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
-                    discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                    discount_rate_project=discount_rate_project, discount_rate_equity=discount_rate_equity,
                     rate_schedule=rate_schedule,
                 )
             
@@ -1844,8 +1860,8 @@ def main():
                     dsra_months=debt_config.senior.dsra_months,
                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
-                    discount_rate_project=0.0641,
-                    discount_rate_equity=0.0965,
+                    discount_rate_project=discount_rate_project,
+                    discount_rate_equity=discount_rate_equity,
                     rate_schedule=rate_schedule,
                 )
             
@@ -1999,8 +2015,8 @@ def main():
                     dsra_months=debt_config.senior.dsra_months,
                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
-                    discount_rate_project=0.0641,
-                    discount_rate_equity=0.0965,
+                    discount_rate_project=discount_rate_project,
+                    discount_rate_equity=discount_rate_equity,
                     rate_schedule=rate_schedule,
                 )
             
@@ -2101,8 +2117,8 @@ def main():
                             dsra_months=debt_config.senior.dsra_months,
                             shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                             shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
-                            discount_rate_project=0.0641,
-                            discount_rate_equity=0.0965,
+                            discount_rate_project=discount_rate_project,
+                            discount_rate_equity=discount_rate_equity,
                             rate_schedule=rate_sched,
                         )
                         var_values.append(bps_offset)
@@ -2349,8 +2365,8 @@ def main():
                                     dsra_months=debt_config.senior.dsra_months,
                                     shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                                     shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
-                                    discount_rate_project=0.0641,
-                                    discount_rate_equity=0.0965,
+                                    discount_rate_project=discount_rate_project,
+                                    discount_rate_equity=discount_rate_equity,
                                     rate_schedule=rate_sched_tw,
                                 )
                                 row.append(result.project_irr * 100)
@@ -2443,7 +2459,7 @@ def main():
                 dsra_months=debt_config.senior.dsra_months,
                 shl_amount=debt_config.shl.shl_keur if debt_config.shl else 0,
                 shl_rate=debt_config.shl.shl_rate if debt_config.shl else 0.06,
-                discount_rate_project=0.0641, discount_rate_equity=0.0965,
+                discount_rate_project=discount_rate_project, discount_rate_equity=discount_rate_equity,
                 rate_schedule=rate_schedule,
             )
             

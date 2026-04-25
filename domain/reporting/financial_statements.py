@@ -184,6 +184,7 @@ class WaterfallPeriodData:
     shl_service_keur: float
     shl_principal_keur: float
     shl_interest_keur: float
+    senior_principal_keur: float
     distribution_keur: float
     dsra_balance_keur: float
     cash_keur: float
@@ -213,6 +214,7 @@ def flatten_waterfall(periods) -> list[WaterfallPeriodData]:
             shl_service_keur=getattr(p, 'shl_service_keur', 0.0),
             shl_principal_keur=getattr(p, 'shl_principal_keur', 0.0),
             shl_interest_keur=getattr(p, 'shl_interest_keur', 0.0),
+            senior_principal_keur=getattr(p, 'senior_principal_keur', 0.0),
             distribution_keur=getattr(p, 'distribution_keur', 0.0),
             dsra_balance_keur=getattr(p, 'dsra_balance_keur', 0.0),
             cash_keur=getattr(p, 'cash_balance_keur', 0.0),
@@ -525,25 +527,30 @@ def build_debt_schedule_simple(
     """
     rows = []
     flat = flatten_waterfall(waterfall_periods)
-    prev_bs_row = None  # Track previous row for opening balance calculation
+    prev_row = None  # Track previous DebtServiceRow for opening balance
     
     for p in flat:
         if not p.is_operation:
             continue
 
-        # Opening balance = previous period's closing balance (not closing + ds)
-        # senior_balance_keur from previous period is the closing balance
-        # We need to track the previous closing balance to compute the correct opening
-        prev_closing = prev_bs_row.closing_balance_keur if prev_bs_row else 0.0
-        opening = prev_closing
+        # Opening balance = previous period's closing balance
+        # For first period, derive from senior_balance + principal since we don't have prior period
+        if prev_row is None:
+            # First operational period: opening = senior_balance + principal paid in this period
+            # senior_balance_keur is the CLOSING balance after this period's payment
+            # So opening = senior_balance + principal (what we paid this period to get to closing)
+            opening = p.senior_balance_keur + p.senior_principal_keur if p.senior_balance_keur else 0.0
+        else:
+            opening = prev_row.closing_balance_keur
+        
         interest = p.interest_senior_keur
-        scheduled_principal = p.senior_principal_keur  # actual principal component, not total ds
+        scheduled_principal = p.senior_principal_keur  # actual principal component
         cash_sweep = 0.0  # TODO: extract from waterfall
         total_principal = scheduled_principal + cash_sweep
         total_ds = interest + total_principal
         closing = opening - total_principal
 
-        cfads = p.ebitda_keur  # approximate
+        cfads = p.ebitda_keur
         dscr = p.dscr if p.dscr > 0 else float('inf')
         llcr = cfads / closing if closing > 0 else float('inf')
 
@@ -562,6 +569,6 @@ def build_debt_schedule_simple(
             llcr=llcr,
         )
         rows.append(row)
-        prev_bs_row = row  # Track for next iteration's opening balance
+        prev_row = row  # Track for next iteration
 
     return rows
