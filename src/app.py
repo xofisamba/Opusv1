@@ -556,11 +556,9 @@ def _build_engine_from_inputs(inputs: ProjectInputs) -> PeriodEngine:
     )
 
 
-def _get_inputs_from_session() -> ProjectInputs:
-    """Get inputs from session_state or fallback to Oborovo default."""
-    if st.session_state.get("inputs") is not None:
-        return st.session_state.inputs
-    return create_blank_project()
+def _get_inputs_from_session() -> Optional[ProjectInputs]:
+    """Get inputs from session_state. Returns None until user clicks Pokreni Model."""
+    return st.session_state.get("inputs", None)
 
 
 
@@ -1453,6 +1451,7 @@ def main():
         # === Scenario Comparison (P90 debt sizing) ===
         if selected_scenarios and len(selected_scenarios) > 1:
             inputs = _get_inputs_from_session()
+            if inputs is None: return
             errors = inputs.validate_for_calculation()
             if errors:
                 for e in errors: st.error(e)
@@ -1630,6 +1629,7 @@ def main():
         # Run waterfall to get P&L data
         try:
             inputs = _get_inputs_from_session()
+            if inputs is None: return
             errors = inputs.validate_for_calculation()
             if errors:
                 for e in errors: st.error(e)
@@ -1732,6 +1732,7 @@ def main():
         
         try:
             inputs = _get_inputs_from_session()
+            if inputs is None: return
             errors = inputs.validate_for_calculation()
             if errors:
                 for e in errors: st.error(e)
@@ -1903,6 +1904,7 @@ def main():
         
         try:
             inputs = _get_inputs_from_session()
+            if inputs is None: return
             errors = inputs.validate_for_calculation()
             if errors:
                 for e in errors: st.error(e)
@@ -2039,6 +2041,7 @@ def main():
         # Run waterfall calculation
         try:
             inputs = _get_inputs_from_session()
+            if inputs is None: return
             errors = inputs.validate_for_calculation()
             if errors:
                 for e in errors: st.error(e)
@@ -2200,6 +2203,7 @@ def main():
             
             # Build base case inputs
             inputs = _get_inputs_from_session()
+            if inputs is None: return
             errors = inputs.validate_for_calculation()
             if errors:
                 for e in errors: st.error(e)
@@ -2651,6 +2655,7 @@ def main():
         
         try:
             inputs = _get_inputs_from_session()
+            if inputs is None: return
             errors = inputs.validate_for_calculation()
             if errors:
                 for e in errors: st.error(e)
