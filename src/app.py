@@ -839,6 +839,9 @@ def render_debt_config() -> DebtConfig:
     with disc_col3:
         st.caption(f"Used for NPV/IRR")
     
+    st.session_state.discount_rate_project = discount_rate_project
+    st.session_state.discount_rate_equity = discount_rate_equity
+
     senior = SeniorDebtParams(
         gearing_ratio=gearing,
         tenor_years=tenor,
