@@ -1032,7 +1032,43 @@ def render_tax_config() -> TaxParams:
         with col_btn2:
             if st.button("Use RS Defaults"):
                 return TaxParams.create_rs_defaults()
-        
+
+        # Custom Tax Override expander (Task 0.4)
+        with st.expander("🔧 Custom Tax Override", expanded=False):
+            st.caption("Add custom adjustments to tax calculation layers")
+
+            if "tax_overrides" not in st.session_state:
+                st.session_state.tax_overrides = []
+
+            override_df = pd.DataFrame(
+                st.session_state.tax_overrides,
+                columns=["Name", "Apply To", "Operation", "Value (kEUR or %)", "Start Year", "End Year"],
+            )
+
+            edited_df = st.data_editor(
+                override_df,
+                num_rows="dynamic",
+                column_config={
+                    "Apply To": st.column_config.SelectboxColumn(
+                        "Apply To",
+                        options=["ebitda", "ebt", "tax", "net_income"],
+                        default="tax",
+                    ),
+                    "Operation": st.column_config.SelectboxColumn(
+                        "Operation",
+                        options=["add", "subtract", "multiply"],
+                        default="add",
+                    ),
+                },
+                hide_index=True,
+            )
+
+            st.session_state.tax_overrides = edited_df.to_dict("records")
+
+            if st.button("Clear Overrides", type="secondary"):
+                st.session_state.tax_overrides = []
+                st.rerun()
+
         return TaxParams(
             jurisdiction="HR",
             corporate_tax_rate=tax_rate,
