@@ -86,6 +86,16 @@ DEFAULTS = {
     # SHL
     'shl_rate': 0.0,
 
+    # Opex items (Task 0.6)
+    'opex_items': None,  # None = use blank template
+
+    # Sponsors / equity structure (Task 0.7)
+    'sponsors': [
+        {"sponsor_id": "SP-001", "name": "Investor 1",
+         "equity_pct": 100.0, "shl_pct": 0.0, "shl_rate_pct": 8.0},
+    ],
+    'distribution_policy': 'pro_rata',
+
     # Horizon
     'investment_horizon': 30,
 
@@ -104,6 +114,21 @@ DEFAULTS = {
 }
 
 
+def _opex_items_to_dict(items) -> list[dict]:
+    """Convert OpexItem tuple to list of dicts for session state."""
+    return [
+        {
+            "code": getattr(item, 'code', f"OP.{i:02d}"),
+            "name": item.name,
+            "category": getattr(item, 'category', 'Other'),
+            "y1_amount_keur": item.y1_amount_keur,
+            "inflation_pct": item.annual_inflation * 100,
+            "deductible": getattr(item, 'deductible_for_tax', True),
+        }
+        for i, item in enumerate(items)
+    ]
+
+
 def init_session_state() -> None:
     """Initialize session state with default values.
 
@@ -114,6 +139,11 @@ def init_session_state() -> None:
     for key, value in DEFAULTS.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+    # Task 0.6: Initialize opex_items with blank template if None
+    if st.session_state.get('opex_items') is None:
+        from core.domain.opex import create_blank_opex_items
+        st.session_state.opex_items = _opex_items_to_dict(create_blank_opex_items())
 
 
 def get_defaults() -> dict[str, Any]:
