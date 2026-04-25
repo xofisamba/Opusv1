@@ -98,26 +98,24 @@ def _build_inputs_from_session() -> ProjectInputs:
         bank_fees_keur=hard_capex * s.arrangement_fee / 100,
     )
 
-    # OPEX
-    if s.technology == 'Solar':
-        opex_per_mw = 15000
+    # OPEX — use session state editor (Task 0.6)
+    # Falls back to blank if session state is empty
+    raw_opex = s.get('opex_items', [])
+    if raw_opex:
+        opex_items = tuple(
+            OpexItem(
+                name=str(row.get('name', 'Item')),
+                y1_amount_keur=float(row.get('y1_amount_keur', 0)),
+                annual_inflation=float(row.get('inflation_pct', 2.0)) / 100.0,
+            )
+            for row in raw_opex
+            if row.get('name')
+        )
     else:
-        opex_per_mw = 35000
-
-    opex_y1_total = capacity * opex_per_mw / 1000
-
-    opex_items = [
-        OpexItem(name="Technical Management", y1_amount_keur=opex_y1_total * 0.15, annual_inflation=0.02),
-        OpexItem(name="Infrastructure Maintenance", y1_amount_keur=opex_y1_total * 0.18, annual_inflation=0.02),
-        OpexItem(name="Insurance", y1_amount_keur=opex_y1_total * 0.19, annual_inflation=0.02),
-        OpexItem(name="Lease & Property Tax", y1_amount_keur=opex_y1_total * 0.15, annual_inflation=0.02),
-        OpexItem(name="Power Expenses", y1_amount_keur=opex_y1_total * 0.09, annual_inflation=0.0),
-        OpexItem(name="Fees", y1_amount_keur=opex_y1_total * 0.07, annual_inflation=0.0),
-        OpexItem(name="Audit & Legal", y1_amount_keur=opex_y1_total * 0.02, annual_inflation=0.02),
-        OpexItem(name="Bank Fees", y1_amount_keur=opex_y1_total * 0.015, annual_inflation=0.02),
-        OpexItem(name="Environmental & Social", y1_amount_keur=opex_y1_total * 0.01, annual_inflation=0.02),
-        OpexItem(name="Contingencies", y1_amount_keur=opex_y1_total * 0.04, annual_inflation=0.02),
-    ]
+        # Blank fallback — no hardcoded defaults
+        opex_items = (
+            OpexItem(name="OPEX", y1_amount_keur=0.0, annual_inflation=0.02),
+        )
 
     market_prices = tuple([s.merchant_price * (1.02 ** i) for i in range(30)])
 
