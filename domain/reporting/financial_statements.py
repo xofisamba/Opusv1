@@ -118,8 +118,8 @@ class CashFlowRow:
     # A. Operating Activities
     net_income_keur: float
     add_depreciation_keur: float  # Non-cash add-back
+    add_interest_keur: float  # Interest add-back (paid under Fin CF)
     change_in_working_capital_keur: float  # Typically 0 for SPV
-    tax_paid_keur: float
     operating_cash_flow_keur: float
 
     # B. Investing Activities
@@ -453,11 +453,13 @@ def build_cash_flow_statement(
     for inc in income_rows:
         year = inc.year
 
-        # A. Operating
+        # A. Operating (indirect method)
+        # Net income already reflects interest deduction — add interest back here.
+        # Interest paid is reported under Financing CF (no double-count).
         op_cf = (
             inc.net_income_keur
             + inc.depreciation_financial_keur
-            - inc.income_tax_keur
+            + inc.total_interest_keur
         )
 
         # B. Investing
@@ -485,8 +487,8 @@ def build_cash_flow_statement(
             year=year,
             net_income_keur=inc.net_income_keur,
             add_depreciation_keur=inc.depreciation_financial_keur,
+            add_interest_keur=inc.total_interest_keur,
             change_in_working_capital_keur=0.0,
-            tax_paid_keur=inc.income_tax_keur,
             operating_cash_flow_keur=op_cf,
             capex_keur=capex,
             dsra_movement_keur=dsra_movement,

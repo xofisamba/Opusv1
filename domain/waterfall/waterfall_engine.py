@@ -215,6 +215,7 @@ def run_waterfall(
     idc_keur: float = 0.0,
     bank_fees_keur: float = 0.0,
     commitment_fees_keur: float = 0.0,
+    opex_schedule: list[float] | None = None,  # Per-period OPEX. If None, inferred from rev-ebitda.
 ) -> WaterfallResult:
     """Run full waterfall with iterative debt sculpting.
 
@@ -502,6 +503,7 @@ def run_waterfall(
         rate_for_llcr = rate_schedule[period_in_tenor] if rate_schedule and period_in_tenor < len(rate_schedule) else rate_per_period
         llcr_val = compute_llcr(remaining_fcf, remaining_balance, rate_for_llcr, tenor_periods - period_in_tenor)
         plcr_val = compute_plcr(remaining_fcf, remaining_balance, rate_for_llcr, len(remaining_fcf))
+        opex_val = opex_schedule[i] if opex_schedule is not None and i < len(opex_schedule) else max(0.0, rev - ebitda)
         wp = WaterfallPeriod(
             period=period.index,
             date=period.end_date,
@@ -510,7 +512,7 @@ def run_waterfall(
             is_operation=True,
             generation_mwh=gen,
             revenue_keur=rev,
-            opex_keur=rev - ebitda,
+            opex_keur=opex_val,
             ebitda_keur=ebitda,
             depreciation_keur=dep,
             interest_senior_keur=si,

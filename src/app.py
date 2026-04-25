@@ -1617,7 +1617,8 @@ def main():
                 result.periods, fin_dep_dict, tax_dep_dict, horizon
             )
             
-            # Build dsra_schedule, cash_schedule, and distribution_schedule from waterfall periods (H2 = end of year)
+            # Build dsra_schedule, cash_schedule (H2 = year-end snapshot) and
+            # distribution_schedule (H1+H2 sum = full-year distributions for RE calculation)
             dsra_schedule = {}
             cash_schedule = {}
             distribution_schedule = {}
@@ -1625,7 +1626,11 @@ def main():
                 if p.is_operation and p.period_in_year == 2:
                     dsra_schedule[p.year_index] = p.dsra_balance_keur
                     cash_schedule[p.year_index] = p.cash_balance_keur
-                    distribution_schedule[p.year_index] = p.distribution_keur
+            for p in result.periods:
+                if p.is_operation and p.year_index > 0:
+                    distribution_schedule[p.year_index] = (
+                        distribution_schedule.get(p.year_index, 0.0) + p.distribution_keur
+                    )
             
             # Build debt schedule from waterfall
             debt_schedule = build_debt_schedule_simple(result.periods, rate)
@@ -1794,7 +1799,7 @@ def main():
                     "Year": row.year,
                     "Net Income (kEUR)": f"{row.net_income_keur:,.0f}",
                     "+ Depreciation (kEUR)": f"{row.add_depreciation_keur:,.0f}",
-                    "- Tax (kEUR)": f"{-row.tax_paid_keur:,.0f}",
+                    "+ Interest (kEUR)": f"{row.add_interest_keur:,.0f}",
                     "Operating CF (kEUR)": f"{row.operating_cash_flow_keur:,.0f}",
                     "Capex (kEUR)": f"{row.capex_keur:,.0f}",
                     "DSRA Movement (kEUR)": f"{row.dsra_movement_keur:,.0f}",

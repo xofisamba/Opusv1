@@ -188,19 +188,24 @@ def compute_waterfall_cached(
     generation = full_generation_schedule(inputs, engine)
     opex_annual = opex_schedule_annual(inputs, inputs.info.horizon_years)
 
-    # Build EBITDA schedule
+    # Build per-period schedules aligned with periods_list
+    periods_list = list(engine.periods())
+    dep_per_year = inputs.capex.total_capex / inputs.info.horizon_years
+
     ebitda_schedule = []
-    for p in engine.periods():
+    depreciation_schedule = []
+    opex_schedule = []
+    for p in periods_list:
         if not p.is_operation:
             ebitda_schedule.append(0.0)
+            depreciation_schedule.append(0.0)
+            opex_schedule.append(0.0)
         else:
             rev = revenue.get(p.index, 0.0)
-            opex = opex_annual.get(p.year_index, 0.0) / 2  # semi-annual split
-            ebitda_schedule.append(rev - opex)
-
-    # Build depreciation schedule (equal over horizon)
-    dep_per_year = inputs.capex.total_capex / inputs.info.horizon_years
-    depreciation_schedule = [dep_per_year for _ in range(inputs.info.horizon_years)]
+            opex = opex_annual.get(p.year_index, 0.0) / 2
+            ebitda_schedule.append(max(0.0, rev - opex))
+            depreciation_schedule.append(dep_per_year / 2)
+            opex_schedule.append(opex)
 
     # Compute waterfall
     from domain.waterfall.waterfall_engine import run_waterfall
@@ -215,7 +220,7 @@ def compute_waterfall_cached(
         ebitda_schedule=ebitda_schedule,
         revenue_schedule=[revenue.get(p.index, 0.0) for p in periods_list],
         generation_schedule=[generation.get(p.index, 0.0) for p in periods_list],
-        depreciation_schedule=depreciation_schedule,
+        opex_schedule=opex_schedule,
         periods=periods_list,
         total_capex=inputs.capex.total_capex,
         rate_per_period=rate_per_period,
@@ -230,7 +235,6 @@ def compute_waterfall_cached(
         discount_rate_equity=discount_rate_equity,
     )
 
-    # Cache result
     cache.set(inputs_key, result)
 
     return result
@@ -403,15 +407,14 @@ def cached_run_waterfall_v3(
     revenue_schedule = []
     generation_schedule = []
     depreciation_schedule = []
+    opex_schedule = []
 
     for p in periods_list:
         rev = revenue_dict.get(p.index, 0)
         gen = generation_dict.get(p.index, 0)
         if p.is_operation:
-            # Semi-annual: use annual depreciation schedule (year_index is 1-based)
             opex = opex_annual.get(p.year_index, 0) / 2
             ebitda = max(0, rev - opex)
-            # Get annual dep from schedule, split evenly for semi-annual
             annual_dep = depreciation_schedule_annual[p.year_index - 1] if p.year_index <= len(depreciation_schedule_annual) else dep_per_year
             dep = annual_dep / 2
         else:
@@ -423,12 +426,14 @@ def cached_run_waterfall_v3(
         generation_schedule.append(gen)
         ebitda_schedule.append(ebitda)
         depreciation_schedule.append(dep)
+        opex_schedule.append(opex)
 
     return run_waterfall(
         ebitda_schedule=ebitda_schedule,
         revenue_schedule=revenue_schedule,
         generation_schedule=generation_schedule,
         depreciation_schedule=depreciation_schedule,
+        opex_schedule=opex_schedule,
         periods=periods_list,
         total_capex=inputs.capex.total_capex,
         rate_per_period=rate_per_period,
