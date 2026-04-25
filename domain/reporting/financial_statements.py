@@ -536,18 +536,16 @@ def build_debt_schedule_simple(
             continue
 
         # Opening balance = previous period's closing balance
-        # For first period, derive from senior_balance + principal since we don't have prior period
+        # senior_balance_keur from waterfall = balance_schedule[period] = OPENING balance for that period
+        # (This is the scheduled opening balance; actual closing may differ due to cash sweep)
         if prev_row is None:
-            # First operational period: opening = senior_balance + principal paid in this period
-            # senior_balance_keur is the CLOSING balance after this period's payment
-            # So opening = senior_balance + principal (what we paid this period to get to closing)
-            opening = p.senior_balance_keur + p.senior_principal_keur if p.senior_balance_keur else 0.0
+            opening = p.senior_balance_keur if p.senior_balance_keur else 0.0
         else:
             opening = prev_row.closing_balance_keur
-        
+
         interest = p.interest_senior_keur
-        scheduled_principal = p.senior_principal_keur  # actual principal component
-        cash_sweep = 0.0  # TODO: extract from waterfall
+        scheduled_principal = p.senior_principal_keur
+        cash_sweep = getattr(p, 'cash_sweep_keur', 0.0)
         total_principal = scheduled_principal + cash_sweep
         total_ds = interest + total_principal
         closing = opening - total_principal

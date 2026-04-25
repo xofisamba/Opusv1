@@ -1617,15 +1617,12 @@ def main():
                 result.periods, fin_dep_dict, tax_dep_dict, horizon
             )
             
-            # Build dsra_schedule, cash_schedule (H2 = year-end snapshot) and
-            # distribution_schedule (H1+H2 sum = full-year distributions for RE calculation)
+            # Build dsra_schedule and distribution_schedule from waterfall periods
             dsra_schedule = {}
-            cash_schedule = {}
             distribution_schedule = {}
             for p in result.periods:
                 if p.is_operation and p.period_in_year == 2:
                     dsra_schedule[p.year_index] = p.dsra_balance_keur
-                    cash_schedule[p.year_index] = p.cash_balance_keur
             for p in result.periods:
                 if p.is_operation and p.year_index > 0:
                     distribution_schedule[p.year_index] = (
