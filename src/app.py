@@ -1634,13 +1634,43 @@ def main():
             
             # Build debt schedule from waterfall
             debt_schedule = build_debt_schedule_simple(result.periods, rate)
-            
+
             # Get equity parameters
             total_capex = inputs.capex.total_capex
             share_capital = inputs.financing.share_capital_keur
             share_premium = inputs.financing.share_premium_keur
             shl_initial = inputs.financing.shl_amount_keur if hasattr(inputs.financing, 'shl_amount_keur') else (debt_config.shl.shl_keur if debt_config.shl else 0)
-            
+
+            # Build dsra_schedule, distribution_schedule from waterfall periods
+            dsra_schedule = {}
+            distribution_schedule = {}
+            for p in result.periods:
+                if p.is_operation and p.period_in_year == 2:
+                    dsra_schedule[p.year_index] = p.dsra_balance_keur
+            for p in result.periods:
+                if p.is_operation and p.year_index > 0:
+                    distribution_schedule[p.year_index] = (
+                        distribution_schedule.get(p.year_index, 0.0) + p.distribution_keur
+                    )
+
+            # Build CF statement to derive closing_cash per year (used in BS)
+            equity_injection = inputs.financing.share_capital_keur + inputs.financing.share_premium_keur
+            shl_drawdown = inputs.financing.shl_amount_keur if hasattr(inputs.financing, 'shl_amount_keur') else (debt_config.shl.shl_keur if debt_config.shl else 0)
+            cf_rows = build_cash_flow_statement(
+                income_rows=income_rows,
+                total_capex_keur=total_capex,
+                equity_injection_keur=equity_injection,
+                shl_drawdown_keur=shl_drawdown,
+                dsra_schedule=dsra_schedule,
+                distribution_schedule=distribution_schedule,
+                debt_schedule=debt_schedule,
+            )
+
+            # Build cash_schedule from CF closing_cash (not waterfall cash_balance)
+            cash_schedule = {}
+            for row in cf_rows:
+                cash_schedule[row.year] = row.closing_cash_keur
+
             # Build balance sheet using domain builder
             bs_rows = build_balance_sheet(
                 income_rows=income_rows,
