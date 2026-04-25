@@ -839,6 +839,10 @@ def render_debt_config() -> DebtConfig:
     with disc_col3:
         st.caption(f"Used for NPV/IRR")
     
+    # Discount rates for NPV/IRR calculations (defined at function scope for use in tabs)
+    discount_rate_project = 0.0641  # default
+    discount_rate_equity = 0.0965    # default
+    
     senior = SeniorDebtParams(
         gearing_ratio=gearing,
         tenor_years=tenor,
