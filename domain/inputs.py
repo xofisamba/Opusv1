@@ -326,6 +326,32 @@ class TaxParams:
     # SHL interest cap (for foreign sovereign)
     shl_cap_applies: bool = True       # Inputs!D412 - SHL interest cap applies
 
+    @classmethod
+    def from_generic_config(cls, cfg: "GenericTaxConfig") -> "TaxParams":
+        """Create TaxParams from a GenericTaxConfig.
+
+        Provides backward compatibility: GenericTaxConfig fields map to TaxParams.
+        """
+        # Import here to avoid circular import
+        from core.tax.generic_tax import GenericTaxConfig
+
+        if not isinstance(cfg, GenericTaxConfig):
+            raise TypeError(f"Expected GenericTaxConfig, got {type(cfg).__name__}")
+
+        return cls(
+            corporate_rate=cfg.cit_rate,
+            loss_carryforward_years=cfg.loss_carryforward_years,
+            loss_carryforward_cap=cfg.loss_carryforward_cap_pct,
+            legal_reserve_cap=0.10,  # Default legal reserve
+            thin_cap_enabled=cfg.interest_cap_enabled,
+            thin_cap_de_ratio=0.80,  # Default DE ratio
+            atad_ebitda_limit=cfg.interest_cap_ebitda_ratio,
+            atad_min_interest_keur=cfg.interest_cap_min_keur,
+            wht_sponsor_dividends=cfg.wht_dividends,
+            wht_sponsor_shl_interest=cfg.wht_interest_shl,
+            shl_cap_applies=True,
+        )
+
 
 @dataclass(frozen=True)
 class ProjectInputs:

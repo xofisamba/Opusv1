@@ -1274,13 +1274,18 @@ def main():
         
         # Validate configuration
         errors = tech_config.validate_configuration()
-        
+
         if errors:
             st.error("### Configuration Errors:")
             for err in errors:
                 st.error(f"  • {err}")
         else:
             st.success("✅ Configuration is valid")
+
+        # Discount rates display (Task 0.10)
+        dr_proj = st.session_state.get("discount_rate_project", 0.0641)
+        dr_eq = st.session_state.get("discount_rate_equity", 0.0965)
+        st.caption(f"💰 **Cost of Capital:** Project WACC {dr_proj*100:.2f}% | Equity {dr_eq*100:.2f}%")
         
         # === Scenario Comparison (P90 debt sizing) ===
         if selected_scenarios and len(selected_scenarios) > 1:
