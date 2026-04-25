@@ -823,7 +823,65 @@ def render_debt_config() -> DebtConfig:
             ["sculpted", "annuity", "straight_line", "bullet"],
             index=0
         )
-    
+
+    # Sponsor / equity structure editor (Task 0.7)
+    with st.expander("👥 Sponzori / Equity Struktura", expanded=False):
+        sponsor_df = pd.DataFrame(st.session_state.get('sponsors', []))
+
+        edited_sponsors = st.data_editor(
+            sponsor_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config={
+                "sponsor_id": st.column_config.TextColumn("ID", width="small"),
+                "name": st.column_config.TextColumn("Naziv sponzora"),
+                "equity_pct": st.column_config.NumberColumn(
+                    "Equity %", min_value=0.0, max_value=100.0,
+                    step=1.0, format="%.1f"
+                ),
+                "shl_pct": st.column_config.NumberColumn(
+                    "SHL %", min_value=0.0, max_value=100.0,
+                    step=1.0, format="%.1f"
+                ),
+                "shl_rate_pct": st.column_config.NumberColumn(
+                    "SHL Stopa %", min_value=0.0, max_value=20.0,
+                    step=0.1, format="%.1f"
+                ),
+            },
+            hide_index=True,
+            key="sponsor_editor",
+        )
+
+        st.session_state.sponsors = edited_sponsors.to_dict('records')
+
+        # Validation indicators
+        total_eq = sum(r.get('equity_pct', 0) for r in st.session_state.sponsors)
+        total_shl = sum(r.get('shl_pct', 0) for r in st.session_state.sponsors)
+        eq_ok = abs(total_eq - 100.0) < 0.5
+        shl_ok = abs(total_shl - 100.0) < 0.5 or total_shl == 0
+
+        col_eq, col_shl = st.columns(2)
+        with col_eq:
+            if eq_ok:
+                st.success(f"✅ Equity: {total_eq:.1f}%")
+            else:
+                st.error(f"❌ Equity: {total_eq:.1f}% (mora biti 100%)")
+        with col_shl:
+            if shl_ok:
+                st.success(f"✅ SHL: {total_shl:.1f}%")
+            else:
+                st.error(f"❌ SHL: {total_shl:.1f}% (mora biti 0% ili 100%)")
+
+        dist_policy = st.selectbox(
+            "Distribucijska politika",
+            ["pro_rata", "preferred_return", "waterfall"],
+            index=["pro_rata", "preferred_return", "waterfall"].index(
+                st.session_state.get('distribution_policy', 'pro_rata')
+            ),
+            help="pro_rata = proporcionalno; preferred_return = hurdle rate; waterfall = tiered",
+        )
+        st.session_state.distribution_policy = dist_policy
+
     # Discount rates for NPV/IRR calculations
     st.markdown("**Discount Rates**")
     disc_col1, disc_col2, disc_col3 = st.columns(3)
@@ -971,6 +1029,70 @@ def create_revenue_chart(revenue_config: RevenueConfig, generation_mwh: float, t
 # =============================================================================
 # MAIN APP
 # =============================================================================
+
+
+# =============================================================================
+# OPEX UI (Task 0.6)
+# =============================================================================
+def render_opex_config() -> None:
+    """Render opex tabular editor in sidebar."""
+    st.subheader("📋 Operativni Troškovi (OPEX)")
+
+    opex_df = pd.DataFrame(st.session_state.get('opex_items', []))
+
+    edited_opex = st.data_editor(
+        opex_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        column_config={
+            "code": st.column_config.TextColumn("Kod", width="small"),
+            "name": st.column_config.TextColumn("Naziv", width="medium"),
+            "category": st.column_config.SelectboxColumn(
+                "Kategorie",
+                options=["O&M", "Insurance", "Lease", "Other"],
+                width="small",
+            ),
+            "y1_amount_keur": st.column_config.NumberColumn(
+                "Y1 Iznos (kEUR)", min_value=0.0, step=1.0, format="%.1f"
+            ),
+            "inflation_pct": st.column_config.NumberColumn(
+                "Inflacija (%)", min_value=0.0, max_value=20.0,
+                step=0.1, format="%.1f"
+            ),
+            "deductible": st.column_config.CheckboxColumn("Porezno odbitno"),
+        },
+        hide_index=True,
+        key="opex_editor",
+    )
+
+    # Save back to session state
+    st.session_state.opex_items = edited_opex.to_dict('records')
+
+    # Show totals
+    total_y1 = sum(r.get('y1_amount_keur', 0) for r in st.session_state.opex_items)
+    capacity = st.session_state.get('capacity_dc', 53.63)
+    per_mw = total_y1 / capacity if capacity > 0 else 0
+    st.caption(f"**Ukupno Y1: {total_y1:,.1f} kEUR** | {per_mw:.1f} kEUR/MW")
+
+    if st.button("↺ Reset na template", key="reset_opex"):
+        from core.domain.opex import create_blank_opex_items
+        st.session_state.opex_items = _opex_items_to_dict(create_blank_opex_items())
+        st.rerun()
+
+
+def _opex_items_to_dict(items) -> list[dict]:
+    """Convert OpexItem tuple to list of dicts for session state."""
+    return [
+        {
+            "code": getattr(item, 'code', f"OP.{i:02d}"),
+            "name": item.name,
+            "category": getattr(item, 'category', 'Other'),
+            "y1_amount_keur": item.y1_amount_keur,
+            "inflation_pct": item.annual_inflation * 100,
+            "deductible": getattr(item, 'deductible_for_tax', True),
+        }
+        for i, item in enumerate(items)
+    ]
 
 
 # =============================================================================
@@ -1188,9 +1310,14 @@ def main():
         
         # Debt config
         debt_config = render_debt_config()
-        
+
         st.divider()
-        
+
+        # Opex tabular editor (Task 0.6)
+        render_opex_config()
+
+        st.divider()
+
         # Tax config
         tax_config = render_tax_config()
         
