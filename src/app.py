@@ -27,6 +27,7 @@ from utils.cache import cached_run_waterfall_v3  # v3: proper hash_funcs
 from utils.rate_curve import build_rate_schedule, apply_rate_shock
 from domain.period_engine import PeriodEngine, PeriodFrequency as PF
 from domain.inputs import ProjectInputs, PeriodFrequency, CapexItem
+from core.domain.inputs import create_blank_project  # Blank project for validation
 from src.ui.charts import (
     create_waterfall_summary_chart, 
     create_dscr_chart,
@@ -559,7 +560,7 @@ def _get_inputs_from_session() -> ProjectInputs:
     """Get inputs from session_state or fallback to Oborovo default."""
     if st.session_state.get("inputs") is not None:
         return st.session_state.inputs
-    return ProjectInputs.create_default_oborovo()
+    return create_blank_project()
 
 
 
@@ -1284,6 +1285,10 @@ def main():
         # === Scenario Comparison (P90 debt sizing) ===
         if selected_scenarios and len(selected_scenarios) > 1:
             inputs = _get_inputs_from_session()
+            errors = inputs.validate_for_calculation()
+            if errors:
+                for e in errors: st.error(e)
+                st.stop()
             engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
@@ -1457,6 +1462,10 @@ def main():
         # Run waterfall to get P&L data
         try:
             inputs = _get_inputs_from_session()
+            errors = inputs.validate_for_calculation()
+            if errors:
+                for e in errors: st.error(e)
+                st.stop()
             engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
@@ -1555,6 +1564,10 @@ def main():
         
         try:
             inputs = _get_inputs_from_session()
+            errors = inputs.validate_for_calculation()
+            if errors:
+                for e in errors: st.error(e)
+                st.stop()
             engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
@@ -1722,6 +1735,10 @@ def main():
         
         try:
             inputs = _get_inputs_from_session()
+            errors = inputs.validate_for_calculation()
+            if errors:
+                for e in errors: st.error(e)
+                st.stop()
             engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
@@ -1854,6 +1871,10 @@ def main():
         # Run waterfall calculation
         try:
             inputs = _get_inputs_from_session()
+            errors = inputs.validate_for_calculation()
+            if errors:
+                for e in errors: st.error(e)
+                st.stop()
             engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
@@ -2011,6 +2032,10 @@ def main():
             
             # Build base case inputs
             inputs = _get_inputs_from_session()
+            errors = inputs.validate_for_calculation()
+            if errors:
+                for e in errors: st.error(e)
+                st.stop()
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
             base_rate_type = debt_config.senior.base_rate_type
@@ -2458,6 +2483,10 @@ def main():
         
         try:
             inputs = _get_inputs_from_session()
+            errors = inputs.validate_for_calculation()
+            if errors:
+                for e in errors: st.error(e)
+                st.stop()
             engine = _build_engine_from_inputs(inputs)
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
