@@ -598,8 +598,15 @@ def _build_engine_from_inputs(inputs: ProjectInputs) -> PeriodEngine:
 
 
 def _get_inputs_from_session() -> Optional[ProjectInputs]:
-    """Get inputs from session_state. Returns None until user clicks Pokreni Model."""
-    return st.session_state.get("inputs", None)
+    """Get inputs from session_state. Returns None until user clicks Pokreni Model.
+    
+    If inputs is stored as a raw dict (e.g., from DB load), returns None since
+    downstream code expects a ProjectInputs object with .info, .validate_for_calculation().
+    """
+    inputs = st.session_state.get("inputs", None)
+    if inputs is None or isinstance(inputs, dict):
+        return None
+    return inputs
 
 
 
@@ -1642,7 +1649,13 @@ def main():
         if selected_scenarios and len(selected_scenarios) > 1:
             inputs = _get_inputs_from_session()
             if inputs is None: return
-            errors = inputs.validate_for_calculation()
+            # Skip scenario comparison when inputs is a dict (loaded from DB as raw JSON)
+            # ProjectInputs object required for validate_for_calculation() and engine build
+            if isinstance(inputs, dict):
+                st.warning("Scenario comparison requires a validated ProjectInputs object. "
+                           "Please re-create inputs in the current session.")
+                st.stop()
+            errors = inputs.validate_for_calculation() if hasattr(inputs, "validate_for_calculation") else []
             if errors:
                 for e in errors: st.error(e)
                 st.stop()
@@ -1820,7 +1833,7 @@ def main():
         try:
             inputs = _get_inputs_from_session()
             if inputs is None: return
-            errors = inputs.validate_for_calculation()
+            errors = inputs.validate_for_calculation() if hasattr(inputs, "validate_for_calculation") else []
             if errors:
                 for e in errors: st.error(e)
                 st.stop()
@@ -1923,7 +1936,7 @@ def main():
         try:
             inputs = _get_inputs_from_session()
             if inputs is None: return
-            errors = inputs.validate_for_calculation()
+            errors = inputs.validate_for_calculation() if hasattr(inputs, "validate_for_calculation") else []
             if errors:
                 for e in errors: st.error(e)
                 st.stop()
@@ -2095,7 +2108,7 @@ def main():
         try:
             inputs = _get_inputs_from_session()
             if inputs is None: return
-            errors = inputs.validate_for_calculation()
+            errors = inputs.validate_for_calculation() if hasattr(inputs, "validate_for_calculation") else []
             if errors:
                 for e in errors: st.error(e)
                 st.stop()
@@ -2232,7 +2245,7 @@ def main():
         try:
             inputs = _get_inputs_from_session()
             if inputs is None: return
-            errors = inputs.validate_for_calculation()
+            errors = inputs.validate_for_calculation() if hasattr(inputs, "validate_for_calculation") else []
             if errors:
                 for e in errors: st.error(e)
                 st.stop()
@@ -2586,7 +2599,7 @@ def main():
             # Build base case inputs
             inputs = _get_inputs_from_session()
             if inputs is None: return
-            errors = inputs.validate_for_calculation()
+            errors = inputs.validate_for_calculation() if hasattr(inputs, "validate_for_calculation") else []
             if errors:
                 for e in errors: st.error(e)
                 st.stop()
@@ -3038,7 +3051,7 @@ def main():
         try:
             inputs = _get_inputs_from_session()
             if inputs is None: return
-            errors = inputs.validate_for_calculation()
+            errors = inputs.validate_for_calculation() if hasattr(inputs, "validate_for_calculation") else []
             if errors:
                 for e in errors: st.error(e)
                 st.stop()
