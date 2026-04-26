@@ -1,3 +1,6 @@
+import sys
+sys.path.insert(0, '/root/.openclaw/workspace/oborovo_model')
+
 """Complete financial model app with generic technology support.
 
 Supports: Solar PV, Wind, BESS, Solar+BESS, Wind+BESS, Agrivoltaics
