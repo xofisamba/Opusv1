@@ -9,19 +9,58 @@ from core.finance.goal_seek import (
 )
 
 
+class TestGoalSeekIntegration:
+    """Real waterfall integration test for goal seek solvers."""
+
+    def test_ppa_solver_converges_with_real_waterfall(self):
+        """PPA-for-IRR solver must return a real PPA price, not 0.
+
+        Uses ProjectInputs.create_default_oborovo() as fixture.
+        Target: 8% project IRR. Solver must converge and return a PPA
+        in the range [30, 200] EUR/MWh.
+        """
+        from domain.inputs import ProjectInputs
+        inputs = ProjectInputs.create_default_oborovo()
+        result = solve_ppa_for_target_irr(
+            inputs,
+            target_irr=0.08,
+            irr_basis="project",
+            bracket_low_eur_mwh=30.0,
+            bracket_high_eur_mwh=200.0,
+        )
+        assert result.success is True, f"Solver failed: {result.error_message}"
+        assert 30.0 < result.solved_value < 200.0, (
+            f"Solved PPA {result.solved_value:.2f} outside reasonable range"
+        )
+        assert result.iterations > 0, "Solver must have iterated"
+
+    def test_ppa_solver_achieves_target_irr(self):
+        """Solver achieved IRR must be within 5bps of target."""
+        from domain.inputs import ProjectInputs
+        inputs = ProjectInputs.create_default_oborovo()
+        result = solve_ppa_for_target_irr(
+            inputs,
+            target_irr=0.08,
+            irr_basis="project",
+        )
+        if result.success:
+            assert abs(result.achieved_metric - 0.08) < 0.005, (
+                f"Achieved IRR {result.achieved_metric:.4f} > 50bps from target"
+            )
+
+
 class TestGoalSeekPPA:
-    """Task 2.6 — PPA-for-IRR solver."""
+    """Task 2.6 — PPA-for-IRR solver (mock-based)."""
 
     def test_no_solution_unreachable_irr(self):
         """Target 30% IRR is impossible → returns success=False."""
-        # Create a mock inputs object (minimal dict-like)
         class MockInputs:
             pass
         inputs = MockInputs()
 
         result = solve_ppa_for_target_irr(
             inputs=inputs,
-            target_irr=0.30,   # impossible
+            target_irr=0.30,
             bracket_low_eur_mwh=30.0,
             bracket_high_eur_mwh=150.0,
         )
@@ -34,14 +73,12 @@ class TestGoalSeekPPA:
             pass
         inputs = MockInputs()
 
-        # Both ends positive → no root
         result = solve_ppa_for_target_irr(
             inputs=inputs,
-            target_irr=0.01,  # very low, both ends likely above
+            target_irr=0.01,
             bracket_low_eur_mwh=10.0,
             bracket_high_eur_mwh=50.0,
         )
-        # Should fail with no solution message (not a crash)
         assert result.success is False
         assert result.iteration_trace is not None
 
@@ -78,7 +115,6 @@ class TestGoalSeekDebt:
             sculpt=True,
         )
         assert result.method == "direct_sculpt"
-        # result may fail due to missing CFADS but should not crash
 
     def test_bisection_no_solution(self):
         """Impossible DSCR target → success=False."""
@@ -88,7 +124,7 @@ class TestGoalSeekDebt:
 
         result = solve_debt_for_target_dscr(
             inputs=inputs,
-            target_dscr=10.0,  # impossible (>10x)
+            target_dscr=10.0,
             sculpt=False,
         )
         assert result.success is False

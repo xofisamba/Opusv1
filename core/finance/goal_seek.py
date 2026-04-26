@@ -7,7 +7,7 @@ or "what debt amount keeps avg DSCR above 1.30x?".
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass, asdict
 from typing import Callable, Optional
 import warnings
 
@@ -159,44 +159,284 @@ def _evaluate_irr_at_ppa(
     irr_basis: str,
     waterfall_fn: Optional[Callable],
 ) -> float:
-    """Run waterfall at given PPA and return IRR."""
-    # Build modified inputs dict with new PPA
+    """Run waterfall at given PPA and return IRR.
+
+    Uses the full cached_run_waterfall_v3 pipeline to get accurate IRR.
+    Falls back to approximation only if waterfall setup fails.
+    """
     try:
         inputs_dict = _get_inputs_dict(inputs)
     except Exception:
         return 0.0
 
-    # Override PPA tariff
+    # Override PPA in copy
     inputs_dict = _set_ppa_tariff(inputs_dict, ppa)
 
     if waterfall_fn:
         irr, _ = waterfall_fn(inputs_dict, ppa)
         return irr
 
-    # Fallback: try to run real waterfall
+    # Full pipeline: reconstruct ProjectInputs → PeriodEngine → cached_run_waterfall_v3
     try:
-        from domain.waterfall.waterfall_engine import run_waterfall
-        result = run_waterfall(inputs_dict)
+        rebuilt = _reconstruct_project_inputs(inputs_dict)
+        if rebuilt is None:
+            return 0.0
+
+        from domain.period_engine import PeriodEngine, PeriodFrequency as PF
+        freq = PF.SEMESTRIAL if rebuilt.info.period_frequency.name == "SEMESTRIAL" else PF.ANNUAL
+        horizon = rebuilt.info.horizon_years or 30
+        ppa_years = rebuilt.revenue.ppa_term_years or 12
+        engine_obj = PeriodEngine(
+            financial_close=rebuilt.info.financial_close,
+            construction_months=rebuilt.info.construction_months,
+            horizon_years=horizon,
+            ppa_years=ppa_years,
+            frequency=freq,
+        )
+
+        financing = inputs_dict.get("financing", {})
+        rate_per = (financing.get("base_rate", 0.03) + financing.get("margin_bps", 265) / 10000) / 2
+        tenor = (financing.get("senior_tenor_years", 14)) * 2
+        target = financing.get("target_dscr", 1.15)
+        tax_rate = inputs_dict.get("tax", {}).get("corporate_rate", 0.10)
+
+        from utils.cache import cached_run_waterfall_v3
+        result = cached_run_waterfall_v3(
+            inputs=rebuilt,
+            engine=engine_obj,
+            rate_per_period=rate_per,
+            tenor_periods=tenor,
+            target_dscr=target,
+            tax_rate=tax_rate,
+        )
         if irr_basis == "equity":
             return result.equity_irr
         return result.project_irr
+    except Exception as e:
+        # Fallback approximation
+        return _estimate_irr_fallback(inputs_dict, ppa, irr_basis)
+
+
+def _evaluate_dscr_at_debt(
+    inputs_dict: dict,
+    debt_amount: float,
+    dscr_basis: str,
+    waterfall_fn: Optional[Callable],
+) -> float:
+    """Run waterfall at given debt amount and return DSCR metric."""
+    if waterfall_fn:
+        dscr, _ = waterfall_fn(inputs_dict, debt_amount)
+        return dscr
+
+    try:
+        rebuilt = _reconstruct_project_inputs(inputs_dict)
+        if rebuilt is None:
+            return 0.0
+
+        # Override debt sizing with fixed debt
+        from domain.period_engine import PeriodEngine, PeriodFrequency as PF
+        freq = PF.SEMESTRIAL if rebuilt.info.period_frequency.name == "SEMESTRIAL" else PF.ANNUAL
+        engine_obj = PeriodEngine(
+            financial_close=rebuilt.info.financial_close,
+            construction_months=rebuilt.info.construction_months,
+            horizon_years=rebuilt.info.horizon_years or 30,
+            ppa_years=rebuilt.revenue.ppa_term_years or 12,
+            frequency=freq,
+        )
+
+        financing = inputs_dict.get("financing", {})
+        rate_per = (financing.get("base_rate", 0.03) + financing.get("margin_bps", 265) / 10000) / 2
+        tenor = financing.get("senior_tenor_years", 14) * 2
+        tax_rate = inputs_dict.get("tax", {}).get("corporate_rate", 0.10)
+
+        from utils.cache import cached_run_waterfall_v3
+        result = cached_run_waterfall_v3(
+            inputs=rebuilt,
+            engine=engine_obj,
+            rate_per_period=rate_per,
+            tenor_periods=tenor,
+            target_dscr=financing.get("target_dscr", 1.15),
+            tax_rate=tax_rate,
+            fixed_debt_keur=debt_amount,
+        )
+
+        if dscr_basis == "min":
+            return result.min_dscr
+        elif dscr_basis == "median":
+            dscrs = [p.dscr for p in result.periods if p.debt_service > 0]
+            if dscrs:
+                return sorted(dscrs)[len(dscrs) // 2]
+            return 0.0
+        return result.avg_dscr
+    except Exception:
+        return _estimate_dscr_fallback(inputs_dict, debt_amount)
+
+
+def _reconstruct_project_inputs(inputs_dict: dict):
+    """Reconstruct a ProjectInputs from a plain inputs dict.
+
+    Mirrors the approach used in ui/pages/4_scenarios.py — builds
+    TechnologyConfig, RevenueConfig, DebtConfig, TaxParams and calls
+    build_inputs_from_ui().
+    """
+    try:
+        from src.app_builder import build_inputs_from_ui
+        from domain.models import (
+            TechnologyConfig, SolarTechnicalParams,
+            RevenueConfig, PPAParams,
+            DebtConfig, SeniorDebtParams,
+            TaxParams,
+        )
+
+        info = inputs_dict.get("info", {})
+        tech = inputs_dict.get("technical", {})
+        revenue = inputs_dict.get("revenue", {})
+        financing = inputs_dict.get("financing", {})
+        tax = inputs_dict.get("tax", {})
+
+        cap_mw = tech.get("capacity_mw", info.get("capacity_mw", 75.26))
+        hours = tech.get("operating_hours_p50", 1494)
+
+        solar_params = SolarTechnicalParams(
+            capacity_dc_mwp=cap_mw * 1.1,
+            capacity_ac_mw=cap_mw,
+            operating_hours_p50=hours,
+            operating_hours_p90_10y=tech.get("operating_hours_p90_10y", 1410),
+            operating_hours_p99_1y=tech.get("operating_hours_p99_1y", 1200),
+            pv_degradation_annual=tech.get("pv_degradation", 0.004),
+            bifaciality_factor=0.0,
+            tracker_type="fixed_tilt",
+            tracker_yield_gain=0.0,
+            soiling_loss_pct=0.02,
+            shading_loss_pct=0.01,
+            mismatch_loss_pct=0.015,
+            dc_wiring_loss_pct=0.02,
+            ac_wiring_loss_pct=0.01,
+            transformer_loss_pct=0.005,
+            inverter_efficiency=0.98,
+            performance_ratio_p50=0.82,
+            grid_curtailment_pct=0.0,
+            self_consumption_pct=0.0,
+        )
+        tech_config = TechnologyConfig(technology_type="solar", solar=solar_params)
+
+        ppa_tariff = revenue.get("ppa_base_tariff", 65.0)
+        ppa_config = PPAParams(
+            ppa_enabled=True,
+            ppa_base_price_eur_mwh=ppa_tariff,
+            ppa_price_index=revenue.get("ppa_index", 0.02),
+            ppa_term_years=revenue.get("ppa_term_years", 10),
+            ppa_volume_share=1.0,
+            balancing_cost_pct=0.025,
+        )
+        rev_config = RevenueConfig(ppa=ppa_config)
+
+        senior = SeniorDebtParams(
+            gearing_ratio=financing.get("gearing_ratio", 0.75),
+            tenor_years=financing.get("senior_tenor_years", 14),
+            base_rate=financing.get("base_rate", 0.03),
+            margin_bps=financing.get("margin_bps", 265),
+            target_dscr=financing.get("target_dscr", 1.15),
+            min_dscr_lockup=financing.get("lockup_dscr", 1.10),
+            dsra_months=financing.get("dsra_months", 6),
+        )
+        debt_config = DebtConfig(senior=senior)
+
+        tax_p = TaxParams(
+            corporate_tax_rate=tax.get("corporate_rate", 0.10),
+            loss_carryforward_years=tax.get("loss_carryforward_years", 5),
+            atad_applies=False,
+            atad_ebitda_limit=0.0,
+            thin_cap_enabled=tax.get("thin_cap_enabled", False),
+            thin_cap_ratio=4.0,
+            wht_dividends=tax.get("wht_sponsor_dividends", 0.05),
+            vat_rate=0.25,
+        )
+
+        proj_name = info.get("name", "Project")
+        proj_company = info.get("company", "Company")
+        country_iso = info.get("country_iso", "HR")
+
+        rebuilt = build_inputs_from_ui(
+            tech_config, rev_config, debt_config, tax_p,
+            project_name=proj_name,
+            company=proj_company,
+            country_iso=country_iso,
+        )
+        return rebuilt
+    except Exception as e:
+        return None
+
+
+def _estimate_irr_fallback(inputs_dict: dict, ppa: float, irr_basis: str) -> float:
+    """Rough IRR approximation when waterfall cannot be run."""
+    try:
+        revenue = inputs_dict.get("revenue", {})
+        capacity = inputs_dict.get("info", {}).get("capacity_mw", 75.26)
+        hours = inputs_dict.get("technical", {}).get("operating_hours_p50", 1494)
+        avail = inputs_dict.get("technical", {}).get("plant_availability", 0.99)
+        opex = inputs_dict.get("opex", {})
+        y1_opex = opex.get("y1_total_keur", 1354) if isinstance(opex, dict) else 1354
+        annual_gen = capacity * hours * avail
+        annual_rev = annual_gen * ppa / 1000
+        cfads = annual_rev - y1_opex
+        if cfads <= 0:
+            return 0.0
+        capex = inputs_dict.get("capex", {}).get("total_capex", 57973) or 57973
+        return cfads / capex  # very rough
     except Exception:
         return 0.0
 
 
+def _estimate_dscr_fallback(inputs_dict: dict, debt_amount: float) -> float:
+    """Rough DSCR approximation when waterfall cannot be run."""
+    try:
+        financing = inputs_dict.get("financing", {})
+        base_rate = financing.get("base_rate", 0.03)
+        margin = financing.get("margin_bps", 265)
+        rate = base_rate + margin / 10000
+        annual_ds = debt_amount * rate
+        cfads = _estimate_cfads(inputs_dict)
+        if cfads and annual_ds > 0:
+            return sum(cfads) / len(cfads) / annual_ds
+    except Exception:
+        pass
+    return 0.0
+
+
 def _get_inputs_dict(inputs: any) -> dict:
-    """Extract plain dict from inputs (supports dataclass or raw dict)."""
+    """Extract plain dict from inputs (supports dataclass, ProjectInputs, or raw dict)."""
     if isinstance(inputs, dict):
         return inputs
+    if is_dataclass(inputs):
+        # Use asdict for proper nested conversion (datetime → string, tuples → lists)
+        import copy
+        result = copy.deepcopy(asdict(inputs))
+        return _clean_asdict(result)
     if hasattr(inputs, "to_dict"):
-        return inputs.to_dict()
+        result = inputs.to_dict()
+        if isinstance(result, dict):
+            return result
     if hasattr(inputs, "__dict__"):
-        result = {}
-        for k, v in inputs.__dict__.items():
-            if not k.startswith("_"):
-                result[k] = v
-        return result
+        return {k: _dataclass_to_dict(v) for k, v in inputs.__dict__.items() if not k.startswith("_")}
     raise ValueError("Cannot convert inputs to dict")
+
+
+def _clean_asdict(obj: Any) -> Any:
+    """Post-process asdict() output: convert enums, dates, tuples to JSON-compatible types."""
+    from datetime import date, datetime
+    if isinstance(obj, dict):
+        return {k: _clean_asdict(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_clean_asdict(x) for x in obj]
+    if isinstance(obj, tuple):
+        return [_clean_asdict(x) for x in obj]
+    if isinstance(obj, (date, datetime)):
+        return obj.isoformat()
+    # Remove enum types (keep value for JSON)
+    if hasattr(obj, 'value') and hasattr(obj, 'name'):
+        return obj.value
+    return obj
 
 
 def _set_ppa_tariff(inputs_dict: dict, ppa: float) -> dict:

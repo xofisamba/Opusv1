@@ -15,29 +15,29 @@ DEFAULTS = {
     'technology': 'Solar',
 
     # Capacity
-    'capacity_dc': 53.63,
-    'capacity_ac': 48.7,
+    'capacity_dc': 0.0,
+    'capacity_ac': 0.0,
 
     # Wind
-    'wind_capacity': 60.0,
+    'wind_capacity': 0.0,
     'turbine_rating': 6.0,
     'num_turbines': 10,
-    'wind_speed': 7.5,
+    'wind_speed': 0.0,
     'hub_height': 100,
     'wake_effects': 0.0,
     'curtailment': 0.0,
 
     # Revenue
-    'ppa_base_tariff': 65.0,
+    'ppa_base_tariff': 0.0,
     'tariff_escalation': 0.02,
     'ppa_term': 10,
-    'merchant_price': 60.0,
+    'merchant_price': 0.0,
     'merchant_tail_enabled': False,
 
     # Yield
-    'yield_p50': 1494.0,
-    'yield_p90': 1410.0,
-    'yield_p99': 1350.0,
+    'yield_p50': 0.0,
+    'yield_p90': 0.0,
+    'yield_p99': 0.0,
     'availability_wind': 0.95,
 
     # Financing
@@ -53,7 +53,7 @@ DEFAULTS = {
     'debt_sizing_method': 'DSCR-Based (Sculpted)',
 
     # Tax
-    'corporate_tax_rate': 0.10,
+    'corporate_tax_rate': 0.0,
     'depreciation_rate': 0.0333,
     'depreciation_period': 30,
     'thin_cap_jurisdiction': 'None (No restriction)',

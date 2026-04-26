@@ -5,7 +5,7 @@ All classes are frozen/immutable.
 """
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Literal
 
 DistributionPolicy = Literal["pro_rata", "waterfall", "preferred_return"]
 
