@@ -274,3 +274,44 @@ v11+1: OBOROVO fixture tolerance ažuriranje
 2. Reverse-engineer TUHO revenue model (missing ~647 kEUR opex)
 3. Ažurirati TUHO golden fixture nakon verifikacije
 
+
+---
+
+## TUHO — ISPRAVLJENA DIJAGNOZA (2026-04-26, 20:25)
+
+### Greška u prethodnoj analizi
+
+Pogrešno zaključeno da je deprecijacija uzrok CFADS razlike.
+**Ispravak**: Excel CFADS (row 69) = EBITDA (row 40) — nema odbitka deprecijacije.
+
+CFADS = Free Cash Flow for Banks = EBITDA (identično u Excelu).
+
+### Točna dijagnoza
+
+| | Model | Excel | Δ |
+|--|--|--|--|
+| Y1-H1 Revenue | 4,187 kEUR | 4,061 kEUR | **+126 kEUR** |
+| Y1-H2 Revenue | 4,210 kEUR | 4,128 kEUR | +82 kEUR |
+| Y1 Revenue | 8,397 kEUR | 8,189 kEUR | +208 kEUR (+2.5%) |
+| Y1 OpEx | 1,998 kEUR | 1,998 kEUR | 0 ✅ |
+| Y1 EBITDA | 6,399 kEUR | 6,191 kEUR | +208 kEUR (+3.4%) |
+
+**Jedini uzrok EBITDA razlike: revenue +2.5%**
+- OpEx je točan (1,998 kEUR) ✅
+- Day fraction je točan (182 dana = 0.4986) ✅
+- Root cause je **revenue formula** — vjerojatno tariff indexing ili net generation
+
+**Kako 2.5% revenue razlike postaje 14.7% debt razlike:**
+- Viši EBITDA → veća allowed debt (DSCR constraint)
+- EBITDA × DSCR → debt oversizing kumulira kroz tenor
+
+### Phase 4 scope (potvrđeno)
+
+1. Reverse-engineer Excel revenue formulu za TUHO (tariff × generation × day_fraction)
+2. Provjeriti: da li Excel koristi net generation (net of availability) umjesto gross?
+3. Ažurirati TUHO golden fixture nakon verifikacije
+
+### Odluka
+
+TUHO model: PRIHVAĆENO za Phase 4 dokumentaciju, NE za fixture update.
+Revenue razlika od +2.5% je dokumentirana, Phase 4 će riješiti.
