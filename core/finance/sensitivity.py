@@ -5,11 +5,10 @@ Uses cached_run_waterfall_v3 for waterfall computation.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as dc_replace
 from typing import Optional
-import copy
 
-from domain.inputs import ProjectInputs
+from domain.inputs import ProjectInputs, CapexStructure, OpexItem
 from domain.period_engine import PeriodEngine, PeriodFrequency
 from utils.cache import cached_run_waterfall_v3
 
@@ -33,9 +32,8 @@ def _get_irr(result: any, basis: str = "project") -> float:
 
 
 def _run_with_inputs(inputs: ProjectInputs, **kwargs) -> any:
-    """Run waterfall with modified inputs via copy-replace."""
-    from copy import replace
-    modified = replace(inputs, **kwargs)
+    """Run waterfall with modified inputs via dc_replace."""
+    modified = dc_replace(inputs, **kwargs)
     engine = PeriodEngine(
         financial_close=modified.info.financial_close,
         construction_months=modified.info.construction_months,
@@ -63,11 +61,43 @@ def _run_with_inputs(inputs: ProjectInputs, **kwargs) -> any:
     return result
 
 
+def _scale_capex(capex: CapexStructure, factor: float) -> CapexStructure:
+    """Return a new CapexStructure with all amounts scaled by factor."""
+    return dc_replace(capex,
+        epc_contract=dc_replace(capex.epc_contract, amount_keur=capex.epc_contract.amount_keur * factor),
+        production_units=dc_replace(capex.production_units, amount_keur=capex.production_units.amount_keur * factor),
+        epc_other=dc_replace(capex.epc_other, amount_keur=capex.epc_other.amount_keur * factor),
+        grid_connection=dc_replace(capex.grid_connection, amount_keur=capex.grid_connection.amount_keur * factor),
+        ops_prep=dc_replace(capex.ops_prep, amount_keur=capex.ops_prep.amount_keur * factor),
+        insurances=dc_replace(capex.insurances, amount_keur=capex.insurances.amount_keur * factor),
+        lease_tax=dc_replace(capex.lease_tax, amount_keur=capex.lease_tax.amount_keur * factor),
+        construction_mgmt_a=dc_replace(capex.construction_mgmt_a, amount_keur=capex.construction_mgmt_a.amount_keur * factor),
+        commissioning=dc_replace(capex.commissioning, amount_keur=capex.commissioning.amount_keur * factor),
+        audit_legal=dc_replace(capex.audit_legal, amount_keur=capex.audit_legal.amount_keur * factor),
+        construction_mgmt_b=dc_replace(capex.construction_mgmt_b, amount_keur=capex.construction_mgmt_b.amount_keur * factor),
+        contingencies=dc_replace(capex.contingencies, amount_keur=capex.contingencies.amount_keur * factor),
+        taxes=dc_replace(capex.taxes, amount_keur=capex.taxes.amount_keur * factor),
+        project_acquisition=dc_replace(capex.project_acquisition, amount_keur=capex.project_acquisition.amount_keur * factor),
+        project_rights=dc_replace(capex.project_rights, amount_keur=capex.project_rights.amount_keur * factor),
+        idc_keur=capex.idc_keur * factor,
+        commitment_fees_keur=capex.commitment_fees_keur * factor,
+        bank_fees_keur=capex.bank_fees_keur * factor,
+        other_financial_keur=capex.other_financial_keur * factor,
+        vat_costs_keur=capex.vat_costs_keur * factor,
+        reserve_accounts_keur=capex.reserve_accounts_keur * factor,
+    )
+
+
+def _scale_opex(opex: tuple[OpexItem, ...], factor: float) -> tuple[OpexItem, ...]:
+    """Return a new opex tuple with all Y1 amounts scaled by factor."""
+    return tuple(dc_replace(item, y1_amount_keur=item.y1_amount_keur * factor) for item in opex)
+
+
 def run_tornado_analysis(
     inputs: ProjectInputs,
     target_irr_basis: str = "project",
 ) -> list[SensitivityResult]:
-    """Run one-variable sensitivity for 6 standard variables.
+    """Run one-variable sensitivity for 5 standard variables.
 
     Variables and ranges:
     - PPA Tariff: ±25%
@@ -77,18 +107,11 @@ def run_tornado_analysis(
     - Interest Rate: ±150bps
 
     Returns sorted by |impact_bps| descending.
-
-    Args:
-        inputs: Base ProjectInputs
-        target_irr_basis: "project" (unlevered) or "equity" (levered)
     """
     base_ppa = inputs.revenue.ppa_base_tariff
     base_gen = inputs.capex.production_units.amount_keur
-    base_capex = inputs.capex.total_capex_keur
-    base_opex = inputs.opex.fixed_operational_cost_keur
-    base_rate = inputs.financing.all_in_rate
+    base_opex = inputs.opex
 
-    # Helper to run a modified scenario
     def run_scenario(**mod_kwargs) -> float:
         result = _run_with_inputs(inputs, **mod_kwargs)
         return _get_irr(result, target_irr_basis)
@@ -96,8 +119,8 @@ def run_tornado_analysis(
     results: list[SensitivityResult] = []
 
     # 1. PPA Tariff ±25%
-    irr_low = run_scenario(revenue=copy.replace(inputs.revenue, ppa_base_tariff=base_ppa * 0.75))
-    irr_high = run_scenario(revenue=copy.replace(inputs.revenue, ppa_base_tariff=base_ppa * 1.25))
+    irr_low = run_scenario(revenue=dc_replace(inputs.revenue, ppa_base_tariff=base_ppa * 0.75))
+    irr_high = run_scenario(revenue=dc_replace(inputs.revenue, ppa_base_tariff=base_ppa * 1.25))
     results.append(SensitivityResult(
         variable="PPA Tariff",
         low_value=base_ppa * 0.75,
@@ -107,11 +130,15 @@ def run_tornado_analysis(
         impact_bps=(irr_high - irr_low) * 10000,
     ))
 
-    # 2. Generation ±20% (scale all generation items)
-    irr_low = run_scenario(capex=copy.replace(inputs.capex,
-        production_units=copy.replace(inputs.capex.production_units, amount_keur=base_gen * 0.80)))
-    irr_high = run_scenario(capex=copy.replace(inputs.capex,
-        production_units=copy.replace(inputs.capex.production_units, amount_keur=base_gen * 1.20)))
+    # 2. Generation ±20%
+    irr_low = run_scenario(
+        capex=dc_replace(inputs.capex,
+            production_units=dc_replace(inputs.capex.production_units, amount_keur=base_gen * 0.80))
+    )
+    irr_high = run_scenario(
+        capex=dc_replace(inputs.capex,
+            production_units=dc_replace(inputs.capex.production_units, amount_keur=base_gen * 1.20))
+    )
     results.append(SensitivityResult(
         variable="Generation",
         low_value=base_gen * 0.80,
@@ -122,33 +149,34 @@ def run_tornado_analysis(
     ))
 
     # 3. CAPEX +20% / -15%
-    irr_low = run_scenario(capex=copy.replace(inputs.capex, total_capex_keur=base_capex * 0.85))
-    irr_high = run_scenario(capex=copy.replace(inputs.capex, total_capex_keur=base_capex * 1.20))
+    irr_low = run_scenario(capex=_scale_capex(inputs.capex, 0.85))
+    irr_high = run_scenario(capex=_scale_capex(inputs.capex, 1.20))
     results.append(SensitivityResult(
         variable="CAPEX",
-        low_value=base_capex * 0.85,
-        high_value=base_capex * 1.20,
+        low_value=inputs.capex.total_capex * 0.85,
+        high_value=inputs.capex.total_capex * 1.20,
         low_irr=irr_low,
         high_irr=irr_high,
         impact_bps=(irr_high - irr_low) * 10000,
     ))
 
     # 4. OPEX ±20%
-    irr_low = run_scenario(opex=copy.replace(inputs.opex, fixed_operational_cost_keur=base_opex * 1.20))
-    irr_high = run_scenario(opex=copy.replace(inputs.opex, fixed_operational_cost_keur=base_opex * 0.80))
+    irr_low = run_scenario(opex=_scale_opex(base_opex, 1.20))
+    irr_high = run_scenario(opex=_scale_opex(base_opex, 0.80))
     results.append(SensitivityResult(
         variable="OPEX",
-        low_value=base_opex * 1.20,
-        high_value=base_opex * 0.80,
+        low_value=1.20,
+        high_value=0.80,
         low_irr=irr_low,
         high_irr=irr_high,
         impact_bps=(irr_high - irr_low) * 10000,
     ))
 
     # 5. Interest Rate ±150bps
-    irr_low = run_scenario(financing=copy.replace(inputs.financing,
+    base_rate = inputs.financing.all_in_rate
+    irr_low = run_scenario(financing=dc_replace(inputs.financing,
         margin_bps=int((base_rate + 0.015) * 10000)))
-    irr_high = run_scenario(financing=copy.replace(inputs.financing,
+    irr_high = run_scenario(financing=dc_replace(inputs.financing,
         margin_bps=int((base_rate - 0.015) * 10000)))
     results.append(SensitivityResult(
         variable="Interest Rate",
@@ -159,7 +187,6 @@ def run_tornado_analysis(
         impact_bps=(irr_high - irr_low) * 10000,
     ))
 
-    # Sort by |impact_bps| descending
     results.sort(key=lambda r: abs(r.impact_bps), reverse=True)
     return results
 
@@ -169,28 +196,15 @@ def run_spider_analysis(
     n_steps: int = 7,
     target_irr_basis: str = "project",
 ) -> dict:
-    """Multi-step sensitivity: returns matrix of variable × IRR at each step.
+    """Multi-step sensitivity: matrix of variable × IRR at each step.
 
-    Steps are symmetric around base: -20%, -13%, -7%, base, +7%, +13%, +20%
-    For interest rate: steps in bps around base rate.
-
-    Returns dict with keys:
-        "variables": list of variable names
-        "steps": list of step multipliers (e.g. [-0.20, -0.13, -0.07, 0, 0.07, 0.13, 0.20])
-        "matrix": dict mapping variable -> list of IRR values at each step
-
-    Args:
-        inputs: Base ProjectInputs
-        n_steps: Number of steps (default 7)
-        target_irr_basis: "project" or "equity"
+    Steps symmetric: -20%, -13%, -7%, base, +7%, +13%, +20%
     """
-    # Symmetric steps
     if n_steps == 7:
         steps = [-0.20, -0.13, -0.07, 0.0, 0.07, 0.13, 0.20]
     elif n_steps == 5:
         steps = [-0.20, -0.10, 0.0, 0.10, 0.20]
     else:
-        # Linear spacing
         steps = [(-1 + 2 * i / (n_steps - 1)) for i in range(n_steps)]
 
     matrix: dict[str, list[float]] = {}
@@ -199,39 +213,35 @@ def run_spider_analysis(
         result = _run_with_inputs(inputs, **mod_kwargs)
         return _get_irr(result, target_irr_basis)
 
-    # 1. PPA Tariff
-    matrix["PPA Tariff"] = [
-        run_mod(revenue=copy.replace(inputs.revenue, ppa_base_tariff=inputs.revenue.ppa_base_tariff * (1 + s)))
-        for s in steps
-    ]
-
-    # 2. Generation
+    base_ppa = inputs.revenue.ppa_base_tariff
     base_gen = inputs.capex.production_units.amount_keur
-    matrix["Generation"] = [
-        run_mod(capex=copy.replace(inputs.capex,
-            production_units=copy.replace(inputs.capex.production_units, amount_keur=base_gen * (1 + s))))
-        for s in steps
-    ]
-
-    # 3. CAPEX
-    base_capex = inputs.capex.total_capex_keur
-    matrix["CAPEX"] = [
-        run_mod(capex=copy.replace(inputs.capex, total_capex_keur=base_capex * (1 + s)))
-        for s in steps
-    ]
-
-    # 4. OPEX
-    base_opex = inputs.opex.fixed_operational_cost_keur
-    matrix["OPEX"] = [
-        run_mod(opex=copy.replace(inputs.opex, fixed_operational_cost_keur=base_opex * (1 + s)))
-        for s in steps
-    ]
-
-    # 5. Interest Rate (steps in bps: ±200bps around base)
+    base_opex = inputs.opex
     base_rate = inputs.financing.all_in_rate
-    rate_steps = [s * 0.02 for s in steps]  # ±200bps range
+
+    matrix["PPA Tariff"] = [
+        run_mod(revenue=dc_replace(inputs.revenue, ppa_base_tariff=base_ppa * (1 + s)))
+        for s in steps
+    ]
+
+    matrix["Generation"] = [
+        run_mod(capex=dc_replace(inputs.capex,
+            production_units=dc_replace(inputs.capex.production_units, amount_keur=base_gen * (1 + s))))
+        for s in steps
+    ]
+
+    matrix["CAPEX"] = [
+        run_mod(capex=_scale_capex(inputs.capex, (1 + s)))
+        for s in steps
+    ]
+
+    matrix["OPEX"] = [
+        run_mod(opex=_scale_opex(base_opex, (1 + s)))
+        for s in steps
+    ]
+
+    rate_steps = [s * 0.02 for s in steps]
     matrix["Interest Rate"] = [
-        run_mod(financing=copy.replace(inputs.financing,
+        run_mod(financing=dc_replace(inputs.financing,
             margin_bps=int((base_rate + rs) * 10000)))
         for rs in rate_steps
     ]
