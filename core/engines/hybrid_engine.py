@@ -28,6 +28,12 @@ def hybrid_dispatch(
 ) -> HybridDispatchResult:
     """Simplified annual hybrid dispatch — no hourly simulation.
 
+    # TODO(phase-3): Replace capacity-factor approximation with 12-representative-week
+    # LP dispatch as specified in Blueprint §4.4. Current simplified annual model
+    # introduces <5% error on annual clipping but cannot produce hourly BESS
+    # arbitrage revenue — acceptable for Phase 1/2, required fix before Phase 3
+    # FID Deck Excel parity test (§6.4 acceptance criterion).
+
     Uses capacity factor to estimate peak hours.
 
     Strategies:

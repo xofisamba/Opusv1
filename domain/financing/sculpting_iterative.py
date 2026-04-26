@@ -566,3 +566,66 @@ def dsra_update(
 
     new_balance = balance_after_withdrawal + contribution
     return new_balance, contribution, withdrawal
+
+
+# =============================================================================
+# DSCR utility functions (moved from deprecated sculpting.py)
+# =============================================================================
+def dscr_at_period(
+    ebitda_keur: float,
+    debt_service_keur: float,
+) -> float:
+    """Calculate DSCR for a single period.
+
+    Args:
+        ebitda_keur: EBITDA in kEUR
+        debt_service_keur: Debt service (interest + principal) in kEUR
+
+    Returns:
+        DSCR (e.g., 1.15). Returns inf if debt_service <= 0.
+    """
+    if debt_service_keur <= 0:
+        return float('inf')
+    return ebitda_keur / debt_service_keur
+
+
+def average_dscr(
+    ebitda_schedule: list[float],
+    debt_service_schedule: list[float],
+) -> float:
+    """Calculate average DSCR over schedule.
+
+    Args:
+        ebitda_schedule: List of EBITDA values
+        debt_service_schedule: List of debt service values
+
+    Returns:
+        Average DSCR
+    """
+    dsrs = [
+        dscr_at_period(ebitda, ds)
+        for ebitda, ds in zip(ebitda_schedule, debt_service_schedule)
+        if ds > 0
+    ]
+    return sum(dsrs) / len(dsrs) if dsrs else 0.0
+
+
+def min_dscr(
+    ebitda_schedule: list[float],
+    debt_service_schedule: list[float],
+) -> float:
+    """Calculate minimum DSCR over schedule.
+
+    Args:
+        ebitda_schedule: List of EBITDA values
+        debt_service_schedule: List of debt service values
+
+    Returns:
+        Minimum DSCR
+    """
+    dsrs = [
+        dscr_at_period(ebitda, ds)
+        for ebitda, ds in zip(ebitda_schedule, debt_service_schedule)
+        if ds > 0
+    ]
+    return min(dsrs) if dsrs else 0.0

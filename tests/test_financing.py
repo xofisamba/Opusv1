@@ -7,8 +7,7 @@ from domain.financing.schedule import (
     annuity_payment,
     balance_after_n_periods,
 )
-from domain.financing.sculpting import (
-    sculpt_debt_dscr,
+from domain.financing.sculpting_iterative import (
     dscr_at_period,
     average_dscr,
     min_dscr,

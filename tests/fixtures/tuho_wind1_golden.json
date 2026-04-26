@@ -1,0 +1,42 @@
+{
+  "_comment": "TUHO Wind — golden numbers from reference Excel FID deck outputs sheet",
+  "metadata": {
+    "technology": "wind",
+    "source": "TUHO_BP_v2.xlsm",
+    "model_period": "semestrial"
+  },
+  "inputs": {
+    "capacity_mw": 35.0,
+    "n_turbines": 5,
+    "operating_hours_p50": 4164.0,
+    "ppa_tariff_y1_eur_mwh": 60.0,
+    "ppa_term_years": 12,
+    "horizon_years": 30,
+    "target_dscr": 1.20,
+    "senior_debt_tenor_years": 14,
+    "debt_margin_bps": 265
+  },
+  "outputs": {
+    "total_capex_keur": 72993.71,
+    "total_debt_keur": 43359.27,
+    "revenue_y1_keur": 8189.29,
+    "project_irr_30y": 0.0947,
+    "equity_irr_30y": 0.1161,
+    "equity_irr_p90": 0.0781,
+    "equity_irr_10y": -0.0507,
+    "project_npv_30y_keur": 17500.83,
+    "avg_dscr": 1.20,
+    "gearing_pct": 0.594
+  },
+  "tolerances": {
+    "capex_pct": 0.005,
+    "revenue_pct": 0.005,
+    "irr_bps": 10,
+    "npv_pct": 0.02,
+    "dscr_abs": 0.002
+  },
+  "notes": {
+    "equity_irr_10y_negative": "Expected — project finance structure has no distributions for first ~14 years. Negative 10y IRR is correct behaviour, not an error.",
+    "dscr_target": "1.20x vs 1.15x on Oborovo — DSCR target must be user-configurable, not hardcoded."
+  }
+}

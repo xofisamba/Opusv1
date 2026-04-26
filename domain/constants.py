@@ -1,26 +1,20 @@
-"""Projektne konstante za Oborovo Solar PV financijski model.
+"""Projektne konstante za OpusCore financijski model.
 
 Služi kao single source of truth za sve magic numbers u projektu.
 """
 from decimal import Decimal
 
-# === Tehničke konstante ===
+# === Tehničke konstante (fizikalni defaulti) ===
 DEFAULT_PV_DEGRADATION: float = 0.004        # 0.4% godišnje
 DEFAULT_BESS_DEGRADATION: float = 0.003      # 0.3% godišnje
 DEFAULT_PLANT_AVAILABILITY: float = 0.99     # 99%
 DEFAULT_GRID_AVAILABILITY: float = 0.99      # 99%
 
-# === Oborovo kapacitet ===
-OBOROVO_CAPACITY_MW: float = 75.26
-OBOROVO_P50_HOURS: float = 1494.0
-OBOROVO_P90_HOURS: float = 1410.0
-OBOROVO_CAPEX_PER_MW: float = 800_000       # EUR/MW za Solar
-OBOROVO_WIND_CAPEX_PER_MW: float = 1_100_000  # EUR/MW za Wind
-
-# === Financijske konstante ===
+# === Financijske konstante (generic) ===
 DEFAULT_PPA_INDEX: float = 0.02              # 2% godišnje
 DEFAULT_MARKET_INFLATION: float = 0.02       # 2% godišnje
-DEFAULT_CORPORATE_TAX: float = 0.10          # 10% (HR)
+# NOTE: Tax rates are jurisdiction-specific — set to 0.0 to force explicit input
+DEFAULT_CORPORATE_TAX: float = 0.0
 
 # === OPEX po MW ===
 SOLAR_OPEX_PER_MW: float = 15_000           # EUR/kW

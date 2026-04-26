@@ -168,7 +168,7 @@
     ]
   },
   "outputs": {
-    "total_capex_keur": 56899.504,
+    "total_capex_keur": 57973.05,
     "total_hard_capex_keur": 54931.4738,
     "total_debt_keur": 42852.279,
     "total_equity_shl_keur": 14047.225,
@@ -177,11 +177,11 @@
     "opex_y1_keur": 1353.91,
     "opex_per_mw_keur": 20.78,
     "opex_per_mwh_eur": 18.23,
-    "project_irr_30y": 0.0842,
-    "equity_irr_30y": 0.11,
-    "project_npv_30y_keur": 13492.68,
+    "project_irr_30y": 0.0796,
+    "equity_irr_30y": 0.1060,
+    "project_npv_30y_keur": 6635.59,
     "equity_npv_30y_keur": 3197.13,
-    "project_discount_rate": 0.0641,
+    "project_discount_rate": 0.0689,
     "equity_discount_rate": 0.0965,
     "avg_dscr": 1.147,
     "senior_ds_y1_keur": 4441.8,
@@ -192,11 +192,11 @@
     "dsra_initial_keur": 2239.1
   },
   "tolerances": {
-    "capex_pct": 0.1,
-    "revenue_pct": 0.1,
+    "capex_pct": 0.005,
+    "revenue_pct": 0.005,
     "opex_pct": 0.02,
-    "irr_bps": 1,
-    "npv_pct": 0.05,
+    "irr_bps": 10,
+    "npv_pct": 0.02,
     "dscr_abs": 0.002
   },
   "discount_rates": {
