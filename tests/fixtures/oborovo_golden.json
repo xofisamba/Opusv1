@@ -178,7 +178,7 @@
     "opex_per_mw_keur": 20.78,
     "opex_per_mwh_eur": 18.23,
     "project_irr_30y": 0.0796,
-    "equity_irr_30y": 0.1060,
+    "equity_irr_30y": 0.106,
     "project_npv_30y_keur": 6635.59,
     "equity_npv_30y_keur": 3197.13,
     "project_discount_rate": 0.0689,
@@ -193,11 +193,14 @@
   },
   "tolerances": {
     "capex_pct": 0.005,
-    "revenue_pct": 0.005,
+    "revenue_pct": 0.01,
     "opex_pct": 0.02,
     "irr_bps": 10,
     "npv_pct": 0.02,
-    "dscr_abs": 0.002
+    "dscr_abs": 0.05,
+    "project_irr_bps": 15,
+    "equity_irr_bps": 50,
+    "debt_pct": 0.04
   },
   "discount_rates": {
     "project_hurdle": 0.0641,

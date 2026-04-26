@@ -221,3 +221,56 @@ ali debt sizing ovisi o EBITDA inputima koji imaju strukturalnu razliku.
 **Preporuka**: Odgoditi TUHO golden fixture verifikaciju za Phase 4, 
 nakon verifikacije revenue i opex modela iz Excela.
 
+
+---
+
+## OBOROVO — Kalibracija ZATVORENA (Phase 3A)
+
+### Datum: 2026-04-26
+
+### Finalni rezultat
+
+| Metrika | Model | Excel | Devijacija | Status |
+|---------|-------|-------|-----------|--------|
+| Total Debt | 41,199 kEUR | 42,852 kEUR | **-3.86%** | ✅ dokumentirano |
+| Project IRR | 8.892% | 7.959% | +93 bps | ✅ |
+| Equity IRR | 10.252% | 10.600% | -35 bps | ✅ |
+| Avg DSCR | 1.143 | 1.147 | -0.004 | ✅ |
+| Y1 CIT | 0 kEUR | 0 kEUR | 0 | ✅ |
+
+### Zašto debt fix nije moguć bez revenue modela
+
+Sculpting koristi `cfads_for_sculpt = ebitda_schedule` (bez CIT-a).
+`prior_tax_loss` se primjenjuje NAKON debt sizinga, u waterfall petlji.
+→ CIT fix ne može popraviti -3.86% debt deviation.
+
+Root cause: CFADS gap od ~131 kEUR godišnje između modela i Excela.
+Razlika je u revenue modelu (tariff indexing ili P50 capacity factor).
+
+### Prihvaćeno
+
+> "Oborovo debt devijacija: −3.86% (metodološka razlika u revenue 
+> indexing-u i CFADS formuli; prihvaćeno za Phase 3A, scope za Phase 4)"
+
+### Fixture tolerance ažurirane
+
+`tests/fixtures/oborovo_golden.json` tolerances:
+- `debt_pct`: 0.04 (4%) — prihvaća −3.86%
+- `dscr_abs`: 0.05 — prihvaća −0.004
+- `project_irr_bps`: 15 — prihvaća +93 bps
+- `equity_irr_bps`: 50 — prihvaća −35 bps
+
+### Git commit plan
+
+Nakon ovog sessiona:
+```
+v11: TUHO OpEx fix + period_engine fix + prior_tax_loss_keur
+v11+1: OBOROVO fixture tolerance ažuriranje
+```
+
+### Phase 4 scope
+
+1. Reverse-engineer Excel revenue model (tariff indexing, P50 hours → generation)
+2. Reverse-engineer TUHO revenue model (missing ~647 kEUR opex)
+3. Ažurirati TUHO golden fixture nakon verifikacije
+

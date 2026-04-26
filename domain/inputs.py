@@ -624,23 +624,20 @@ class ProjectInputs:
             reserve_accounts_keur=0.0,
         )
 
-        # OpEx (from Excel CF sheet row 38, Y1 annual = 1,998 kEUR)
+        # OpEx from Excel OpEx sheet (Y1 total = 1,998.05 kEUR)
         opex_items = (
-            OpexItem(name="Technical Management", y1_amount_keur=350.0, annual_inflation=0.02),
-            OpexItem(name="Infrastructure Maintenance", y1_amount_keur=280.0, annual_inflation=0.02),
-            OpexItem(name="Maintain Site", y1_amount_keur=45.0, annual_inflation=0.02),
-            OpexItem(name="Clean Material", y1_amount_keur=25.0, annual_inflation=0.02),
-            OpexItem(name="Security", y1_amount_keur=30.0, annual_inflation=0.02),
-            OpexItem(name="Insurance", y1_amount_keur=180.0, annual_inflation=0.02),
-            OpexItem(name="Lease & Property Tax", y1_amount_keur=248.90, annual_inflation=0.02),
-            OpexItem(name="Power Expenses", y1_amount_keur=50.0, annual_inflation=0.02),
-            OpexItem(name="Fees", y1_amount_keur=15.0, annual_inflation=0.0),
-            OpexItem(name="Audit&Accounting&Legal", y1_amount_keur=40.0, annual_inflation=0.02),
-            OpexItem(name="Bank Fees", y1_amount_keur=20.0, annual_inflation=0.02),
-            OpexItem(name="Environmental&Social", y1_amount_keur=15.0, annual_inflation=0.02),
-            OpexItem(name="Contingencies", y1_amount_keur=52.0, annual_inflation=0.02),
-            OpexItem(name="Taxes", y1_amount_keur=0.0, annual_inflation=0.0),
-            OpexItem(name="Salary&Payroll", y1_amount_keur=0.0, annual_inflation=0.0),
+            OpexItem(name="Technical Management", y1_amount_keur=280.0, annual_inflation=0.02),
+            OpexItem(name="O&M Preventive & Corrective", y1_amount_keur=426.6, annual_inflation=0.02),
+            OpexItem(name="Maintain Site", y1_amount_keur=68.0, annual_inflation=0.02),
+            OpexItem(name="Clean Material", y1_amount_keur=5.0, annual_inflation=0.02),
+            OpexItem(name="Security", y1_amount_keur=50.0, annual_inflation=0.02),
+            OpexItem(name="Insurance", y1_amount_keur=468.75, annual_inflation=0.02),
+            OpexItem(name="Lease & Property Tax", y1_amount_keur=248.88, annual_inflation=0.02),
+            OpexItem(name="Power Expenses", y1_amount_keur=93.72, annual_inflation=0.02),
+            OpexItem(name="Audit & Accounting & Legal", y1_amount_keur=24.0, annual_inflation=0.02),
+            OpexItem(name="Bank Fees (opex)", y1_amount_keur=20.0, annual_inflation=0.02),
+            OpexItem(name="Environmental & Social Management", y1_amount_keur=200.0, annual_inflation=0.02),
+            OpexItem(name="Contingencies", y1_amount_keur=113.1, annual_inflation=0.06),
         )
 
         info = ProjectInfo(
