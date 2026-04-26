@@ -159,12 +159,12 @@ def distribute_preferred_return(
         total_accrued = sum(accrued.values())
 
         if total_accrued > 0:
-            # Distribution goes to accrued preferred (pro-rata by equity stake)
+            # Shortfall case: distribute proportionally (each sponsor's share = their accrued / total × dist)
+            # This ensures sum of all shares = dist, never exceeding accrued
             for sponsor in sponsors:
                 share = accrued[sponsor.sponsor_id] / total_accrued * dist
-                received = min(share, accrued[sponsor.sponsor_id])
-                result[sponsor.sponsor_id][yr_idx] = received
-                cumulative_received[sponsor.sponsor_id] += received
+                result[sponsor.sponsor_id][yr_idx] = share
+                cumulative_received[sponsor.sponsor_id] += share
         else:
             # After preferred satisfied: pro-rata by equity_pct
             for sponsor in sponsors:
