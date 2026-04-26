@@ -216,6 +216,7 @@ def run_waterfall(
     bank_fees_keur: float = 0.0,
     commitment_fees_keur: float = 0.0,
     opex_schedule: list[float] | None = None,  # Per-period OPEX. If None, inferred from rev-ebitda.
+    prior_tax_loss_keur: float = 0.0,  # Initial tax loss carryforward from construction period
 ) -> WaterfallResult:
     """Run full waterfall with iterative debt sculpting.
 
@@ -312,7 +313,12 @@ def run_waterfall(
     # Base: IDC + bank fees + commitment fees = 1,940 kEUR
     # Additional: construction-period interest (capitalized in Excel, not in our model)
     # Excel carryforward ≈ 9,000 kEUR to keep CIT=0 through Y3-H1
-    prior_tax_loss = idc_keur + bank_fees_keur + commitment_fees_keur + 7060.0  # ~9,000 kEUR total
+    # Initialize prior_tax_loss from parameter if set (>0), otherwise estimate from construction costs
+    # Excel carryforward ≈ 9,000 kEUR for OBOROVO (12m construction), ≈25,000 kEUR for TUHO (18m)
+    if prior_tax_loss_keur > 0:
+        prior_tax_loss = prior_tax_loss_keur
+    else:
+        prior_tax_loss = idc_keur + bank_fees_keur + commitment_fees_keur + 7060.0  # ~9,000 kEUR default
     fiscal_reintegration = 0.0
     fiscal_reintegration_applied = True  # Already accounted for in prior_tax_loss
     loss_carryforward_cap = 1.0  # ATAD: loss cap at 100% of EBITDA
@@ -756,4 +762,5 @@ def cached_run_waterfall(
         idc_keur=inputs.capex.idc_keur,
         bank_fees_keur=inputs.capex.bank_fees_keur,
         commitment_fees_keur=inputs.capex.commitment_fees_keur,
+        prior_tax_loss_keur=inputs.tax.prior_tax_loss_keur,
     )

@@ -203,7 +203,13 @@ class PeriodEngine:
         
         # Determine first period end based on COD proximity to June 30
         jun_30 = date(current_date.year, 6, 30)
-        if (jun_30 - current_date).days < THRESHOLD_DAYS:
+        days_to_jun_30 = (jun_30 - current_date).days
+        
+        # Short first period (1 day COD→Dec31) only if COD is within [jun_30-7days, jun_30]
+        # i.e., 0 <= days_to_jun_30 < 7: COD is at end of June / beginning of July
+        # For TUHO (COD Dec 30): days_to_jun_30 = -183 → uses normal path ✓
+        # For Oborovo (COD June 29): days_to_jun_30 = 1 → uses short path ✓
+        if 0 <= days_to_jun_30 < THRESHOLD_DAYS:
             # COD near June 30 — first period = COD to Dec 31 (H2 by calendar)
             p1_end = date(current_date.year, 12, 31)
             p2_end = date(current_date.year + 1, 6, 30)
@@ -211,8 +217,13 @@ class PeriodEngine:
             p2_period_in_year = 2  # Excel calls this Y1-H2
         else:
             # COD early enough — first period = COD to Jun 30 (H1 by calendar)
-            p1_end = date(current_date.year, 6, 30)
-            p2_end = date(current_date.year, 12, 31)
+            if current_date.month <= 6:
+                p1_end = date(current_date.year, 6, 30)
+                p2_end = date(current_date.year, 12, 31)
+            else:
+                # COD in H2 (Jul-Dec): first period = COD to next Jun 30
+                p1_end = date(current_date.year + 1, 6, 30)
+                p2_end = date(current_date.year + 1, 12, 31)
             p1_period_in_year = 1
             p2_period_in_year = 2
         
