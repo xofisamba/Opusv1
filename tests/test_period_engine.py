@@ -147,10 +147,16 @@ class TestPeriodEnginePeriods:
             assert abs(p.day_fraction - expected_fraction) < 0.001
     
     def test_operation_period_dates_match_excel(self):
-        """Operation period end dates should match Excel CF sheet row 134.
+        """Operation period end dates should match Excel CF sheet.
         
-        Excel row 134 for Oborovo: 2030-06-30, 2030-12-31, 2031-06-30, ...
-        First operation period is Y1-H1 (index 2), ending June 30, 2030.
+        After the period engine fix for COD near semester boundary:
+        - COD = June 29, 2030
+        - First operation period (Y1-H2, index 2): COD → Dec 31, 2030 (185 days, skips 1-day H1)
+        - Second operation period (Y2-H1, index 3): Jan 1 → Jun 30, 2031
+        - Third operation period (Y2-H2, index 4): Jul 1 → Dec 31, 2031
+        
+        Previously the test expected June 30 as first end, but that was a 1-day
+        buggy period — Excel model uses the full H2 (Jul-Dec) as first operation period.
         """
         engine = PeriodEngine(
             financial_close=date(2029, 6, 29),
@@ -162,12 +168,15 @@ class TestPeriodEnginePeriods:
         periods = engine.periods()
         op_periods = [p for p in periods if p.is_operation]
         
-        # First operation period ends June 30, 2030
-        assert op_periods[0].end_date == date(2030, 6, 30)
-        # Second operation period ends December 31, 2030
-        assert op_periods[1].end_date == date(2030, 12, 31)
-        # Third ends June 30, 2031
-        assert op_periods[2].end_date == date(2031, 6, 30)
+        # First operation period ends Dec 31, 2030 (Excel Y1-H2, COD to Dec 31)
+        assert op_periods[0].end_date == date(2030, 12, 31)
+        assert op_periods[0].days_in_period == 185
+        # Second operation period ends June 30, 2031 (Excel Y2-H1)
+        assert op_periods[1].end_date == date(2031, 6, 30)
+        assert op_periods[1].days_in_period == 180  # (Jun 30 - Jan 1).days = 180
+        # Third ends December 31, 2031 (Excel Y2-H2)
+        assert op_periods[2].end_date == date(2031, 12, 31)
+        assert op_periods[2].days_in_period == 183  # (Dec31 - Jul1).days = 183
 
 
 class TestPeriodEngineHelpers:

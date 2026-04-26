@@ -190,51 +190,92 @@ class PeriodEngine:
         ))
         
         # === Operation periods: COD to horizon_end ===
-        # First operation period: COD to first conventional semester end
-        # If COD is June 29, first period ends June 30 (next H1)
+        # COD = June 29, 2030. First operational period starts at COD.
+        # Special case: if COD falls within 7 days of June 30, the natural
+        # H1 end (June 30) would be a 1-day period. Excel skips it and
+        # models COD → Dec 31 as the first period (Y1-H1), then
+        # Jan 1 → Jun 30 as the second period (Y1-H2).
+        # Regardless of calendar H1/H2 designation, Excel numbers the
+        # first two operational periods as Y1-H1 and Y1-H2.
+        
+        THRESHOLD_DAYS = 7
         current_date = self._cod
+        
+        # Determine first period end based on COD proximity to June 30
+        jun_30 = date(current_date.year, 6, 30)
+        if (jun_30 - current_date).days < THRESHOLD_DAYS:
+            # COD near June 30 — first period = COD to Dec 31 (H2 by calendar)
+            p1_end = date(current_date.year, 12, 31)
+            p2_end = date(current_date.year + 1, 6, 30)
+            p1_period_in_year = 1  # Excel calls this Y1-H1
+            p2_period_in_year = 2  # Excel calls this Y1-H2
+        else:
+            # COD early enough — first period = COD to Jun 30 (H1 by calendar)
+            p1_end = date(current_date.year, 6, 30)
+            p2_end = date(current_date.year, 12, 31)
+            p1_period_in_year = 1
+            p2_period_in_year = 2
+        
         period_index = 2
         year_index = 1
-        period_in_year = 1  # H1
         
-        while current_date < self._horizon_end:
-            # Compute conventional end date for this period
-            period_end = _semestrial_end(current_date, period_in_year)
-            
-            # Clamp to horizon end
-            if period_end > self._horizon_end:
-                period_end = self._horizon_end
-            
-            days = self._days_between(current_date, period_end)
-            
-            # PPA active if within PPA term
+        # Generate first two periods (Y1-H1 and Y1-H2)
+        for h, end, pi_year in [(p1_period_in_year, p1_end, p1_period_in_year),
+                                  (p2_period_in_year, p2_end, p2_period_in_year)]:
+            if end > self._horizon_end:
+                end = self._horizon_end
+            days = self._days_between(current_date, end)
             ppa_active = current_date < self._ppa_end
-            
             periods.append(PeriodMeta(
                 index=period_index,
                 start_date=current_date,
-                end_date=period_end,
+                end_date=end,
                 year_index=year_index,
-                period_in_year=period_in_year,
+                period_in_year=pi_year,
                 is_construction=False,
                 is_operation=True,
                 is_ppa_active=ppa_active,
                 days_in_period=days,
                 day_fraction=days / 365.0,
             ))
-            
             period_index += 1
-            period_in_year = 2 if period_in_year == 1 else 1
-            if period_in_year == 1:
-                year_index += 1
-            
-            # Move to next period start (after current period end)
-            if period_in_year == 1:
-                # Next H1 starts Jan 1
-                current_date = date(period_end.year + 1, 1, 1)
+            current_date = date(end.year, end.month, end.day) + __import__('datetime').timedelta(days=1)
+        
+        year_index += 1  # Move to Y2 for subsequent periods
+        
+        # Subsequent years: standard H1 (Jan-Jun) + H2 (Jul-Dec) pairs
+        while current_date < self._horizon_end:
+            # Recalculate ends based on where current_date actually is
+            if current_date.month <= 6:
+                h1_end = date(current_date.year, 6, 30)
+                h2_end = date(current_date.year, 12, 31)
             else:
-                # Next H2 starts July 1
-                current_date = date(period_end.year, 7, 1)
+                h1_end = date(current_date.year, 12, 31)  # Only H2 left this year
+                h2_end = date(current_date.year + 1, 6, 30)
+            
+            for h, end in [(1, h1_end), (2, h2_end)]:
+                if current_date >= self._horizon_end:
+                    break
+                if end > self._horizon_end:
+                    end = self._horizon_end
+                days = self._days_between(current_date, end)
+                ppa_active = current_date < self._ppa_end
+                periods.append(PeriodMeta(
+                    index=period_index,
+                    start_date=current_date,
+                    end_date=end,
+                    year_index=year_index,
+                    period_in_year=h,
+                    is_construction=False,
+                    is_operation=True,
+                    is_ppa_active=ppa_active,
+                    days_in_period=days,
+                    day_fraction=days / 365.0,
+                ))
+                period_index += 1
+                current_date = date(end.year, end.month, end.day) + __import__('datetime').timedelta(days=1)
+            
+            year_index += 1
         
         return periods
     
