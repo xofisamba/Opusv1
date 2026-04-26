@@ -30,4 +30,4 @@ htmlcov/
 .ipynb_checkpoints/
 
 # mypy
-.mypy_cache/
+.mypy_cache/*.db
