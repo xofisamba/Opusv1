@@ -50,6 +50,44 @@ from domain.financing.depreciation import (
 from src.app_builder import build_inputs_from_ui
 from domain.inputs import ProjectInputs
 
+# Import DB-backed session init (replaces basic init_session_state)
+from app.session import init_session_state
+
+
+# =============================================================================
+# Helper: Convert ProjectInputs dataclass → nested dict for DB storage
+# =============================================================================
+def _convert_inputs_to_nested(inputs) -> dict:
+    """Convert a ProjectInputs object (or anything with __dict__) to a nested dict.
+    
+    Used when saving to DB: the persistence layer stores nested dicts,
+    not frozen dataclasses.
+    """
+    import copy
+    from datetime import date, datetime
+    from dataclasses import is_dataclass, asdict
+    
+    def _to_serializable(obj):
+        if isinstance(obj, (date, datetime)):
+            return obj.isoformat()
+        if is_dataclass(obj):
+            return {k: _to_serializable(v) for k, v in asdict(obj).items() if not k.startswith("_")}
+        if isinstance(obj, list):
+            return [_to_serializable(x) for x in obj]
+        if isinstance(obj, dict):
+            return {k: _to_serializable(v) for k, v in obj.items() if not k.startswith("_")}
+        return obj
+    
+    if hasattr(inputs, "__dataclass_fields__"):
+        return _to_serializable(inputs)
+    if hasattr(inputs, "__dict__"):
+        result = {}
+        for k, v in inputs.__dict__.items():
+            if not k.startswith("_"):
+                result[k] = _to_serializable(v)
+        return result
+    return {}
+
 
 # =============================================================================
 # TECHNOLOGY CONFIGURATION UI
@@ -1273,6 +1311,91 @@ def main():
         layout="wide"
     )
     
+    # Initialize DB-backed session state (Phase 2 persistence)
+    init_session_state()
+
+    # =====================================================================
+    # PROJECT SELECTION SCREEN (Phase 2)
+    # Show when no project is active or on first run
+    # =====================================================================
+    if st.session_state.get('active_project_id') is None:
+        st.title("⚡ OpusCore v2 — Project Selection")
+        st.info("No active project. Create or select a project to continue.")
+        
+        with st.sidebar:
+            st.subheader("🆕 Create New Project")
+            new_name = st.text_input("Project Name", value="My Solar Project", key="new_proj_name")
+            new_tech = st.selectbox(
+                "Technology",
+                ["solar", "wind", "bess", "solar_bess", "wind_bess", "agrivoltaic"],
+                index=0,
+                key="new_proj_tech",
+            )
+            if st.button("📁 Create Project", type="primary", key="create_proj_btn"):
+                from persistence.database import get_engine
+                from persistence.repository import ProjectRepository, ScenarioRepository
+                from sqlalchemy.orm import sessionmaker
+                
+                engine = get_engine()
+                Sm = sessionmaker(bind=engine, expire_on_commit=False)
+                db = ProjectRepository(Sm())
+                sc_repo = ScenarioRepository(Sm())
+                
+                proj = db.create_project(new_name, new_tech, "Auto-created")
+                base = proj.scenarios[0]
+                
+                # Save default inputs
+                from app.session import get_defaults, _defaults_to_project_inputs
+                defaults = get_defaults()
+                inputs_nested = _defaults_to_project_inputs(defaults)
+                db.save_inputs(base.id, inputs_nested)
+                
+                st.session_state.active_project_id = proj.id
+                st.session_state.active_scenario_id = base.id
+                st.session_state.inputs = inputs_nested
+                st.rerun()
+        
+        # List existing projects
+        try:
+            from persistence.database import get_engine
+            from persistence.repository import ProjectRepository
+            from sqlalchemy.orm import sessionmaker
+            
+            engine = get_engine()
+            Sm = sessionmaker(bind=engine, expire_on_commit=False)
+            db = ProjectRepository(Sm())
+            projects = db.list_projects()
+            
+            if projects:
+                st.subheader("📂 Existing Projects")
+                cols = st.columns(min(len(projects), 3))
+                for i, proj in enumerate(projects[:3]):
+                    with cols[i % 3]:
+                        with st.container():
+                            st.markdown(f"**{proj.name}**")
+                            st.caption(f"{proj.technology_type} | {proj.description or 'No description'}")
+                            if st.button(f"Open", key=f"open_proj_{proj.id}"):
+                                # Load first scenario
+                                sc_repo = ScenarioRepository(Sm())
+                                scenarios = sc_repo.list_scenarios(proj.id)
+                                base = scenarios[0] if scenarios else None
+                                if base:
+                                    st.session_state.active_project_id = proj.id
+                                    st.session_state.active_scenario_id = base.id
+                                    inputs = db.load_inputs(base.id)
+                                    st.session_state.inputs = inputs
+                                    st.rerun()
+            else:
+                st.info("No existing projects. Create one above to get started.")
+        except Exception as e:
+            st.warning(f"Could not load projects: {e}")
+        
+        st.stop()  # Don't show main app until project selected
+    
+    # Show active project indicator in sidebar
+    active_proj_id = st.session_state.get('active_project_id')
+    active_sc_id = st.session_state.get('active_scenario_id')
+    
     st.title("⚡ Renewable Energy Financial Model")
     st.caption("Generic Project Finance Model - Solar, Wind, BESS, Hybrid")
     
@@ -1341,7 +1464,71 @@ def main():
             )
             st.session_state.inputs = inputs
             st.session_state.engine = _build_engine_from_inputs(inputs)
+            # Save inputs to DB for the active scenario
+            try:
+                from persistence.database import get_engine
+                from persistence.repository import ProjectRepository, ScenarioRepository
+                from sqlalchemy.orm import sessionmaker
+                from app.session import _project_inputs_to_flat
+                
+                engine = get_engine()
+                Sm = sessionmaker(bind=engine, expire_on_commit=False)
+                db = ProjectRepository(Sm())
+                sc_id = st.session_state.get('active_scenario_id')
+                if sc_id:
+                    # Convert ProjectInputs to nested dict for storage
+                    inputs_dict = _convert_inputs_to_nested(inputs)
+                    db.save_inputs(sc_id, inputs_dict)
+                    # Also sync flat keys from inputs
+                    flat = _project_inputs_to_flat(inputs_dict)
+                    for k, v in flat.items():
+                        st.session_state[k] = v
+            except Exception as db_err:
+                st.warning(f"Could not save to DB: {db_err}")
             st.rerun()
+        
+        # Scenario management (Phase 2)
+        st.divider()
+        st.subheader("📁 Scenario Management")
+        
+        active_sc_id = st.session_state.get('active_scenario_id')
+        if active_sc_id:
+            from persistence.database import get_engine
+            from persistence.repository import ScenarioRepository
+            from sqlalchemy.orm import sessionmaker
+            engine = get_engine()
+            Sm = sessionmaker(bind=engine, expire_on_commit=False)
+            sc_repo = ScenarioRepository(Sm())
+            
+            # Get current scenario info
+            try:
+                lineage = sc_repo.get_scenario_lineage(active_sc_id)
+                if lineage:
+                    names = " → ".join([s.name for s in lineage])
+                    st.caption(f"Scenario: {names}")
+            except Exception:
+                pass
+            
+            # Branch to new scenario
+            new_scenario_name = st.text_input(
+                "New scenario name",
+                value="",
+                key="new_scenario_name_input",
+                placeholder="e.g. P90 Sensitivity",
+            )
+            if st.button("🌿 Branch Scenario", key="branch_scenario_btn"):
+                if new_scenario_name.strip():
+                    new_sc = sc_repo.branch_scenario(
+                        active_sc_id,
+                        new_scenario_name.strip(),
+                    )
+                    # Copy current inputs to new scenario
+                    current_inputs = st.session_state.get('inputs', {})
+                    if current_inputs:
+                        db = ProjectRepository(Sm())
+                        db.save_inputs(new_sc.id, current_inputs)
+                    st.session_state.active_scenario_id = new_sc.id
+                    st.rerun()
         
         # Initialize on first load
         if "inputs" not in st.session_state:
@@ -2120,6 +2307,198 @@ def main():
             st.markdown("### DSCR Over Time")
             dscr_chart = create_dscr_chart(result)
             st.plotly_chart(dscr_chart, config=CHART_CONFIG)
+            
+            # Mark result as fresh (not from cache)
+            st.session_state.result_from_cache = False
+            
+            # ================================================================
+            # 🎯 GOAL SEEK PANEL (Phase 2)
+            # ================================================================
+            with st.expander("🎯 Goal Seek"):
+                st.markdown("#### Solve for PPA or Maximum Debt")
+                tab1, tab2 = st.tabs(["PPA for Target IRR", "Max Debt for DSCR"])
+                
+                with tab1:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        target_irr = st.number_input(
+                            "Target IRR (%)", value=10.0, step=0.1,
+                            key="gk_irr_target"
+                        ) / 100
+                        irr_basis = st.selectbox(
+                            "IRR basis", ["equity", "project"],
+                            key="gk_irr_basis"
+                        )
+                    with col2:
+                        bracket_low = st.number_input(
+                            "Min PPA (EUR/MWh)", value=30.0,
+                            key="gk_ppa_low"
+                        )
+                        bracket_high = st.number_input(
+                            "Max PPA (EUR/MWh)", value=150.0,
+                            key="gk_ppa_high"
+                        )
+                    
+                    if st.button("🔍 Solve for PPA", key="gk_solve_ppa"):
+                        with st.spinner("Solving PPA for target IRR..."):
+                            try:
+                                from core.finance.goal_seek import solve_ppa_for_target_irr
+                                
+                                # Build waterfall runner for goal seek
+                                def waterfall_runner(inputs_dict, ppa_value):
+                                    # Replace PPA tariff in inputs
+                                    import copy
+                                    from dataclasses import replace
+                                    mod_inputs = copy.deepcopy(inputs_dict)
+                                    mod_inputs['revenue'] = copy.deepcopy(mod_inputs.get('revenue', {}))
+                                    mod_inputs['revenue']['ppa_base_tariff'] = ppa_value
+                                    
+                                    # Rebuild ProjectInputs from dict
+                                    from src.app_builder import build_inputs_from_ui
+                                    from domain.models import (
+                                        TechnologyConfig, SolarTechnicalParams,
+                                        RevenueConfig, PPAParams,
+                                        DebtConfig, SeniorDebtParams,
+                                        TaxParams,
+                                    )
+                                    # Use a minimal config to rebuild inputs
+                                    tech_cfg = TechnologyConfig.create_solar_defaults()
+                                    rev_cfg = RevenueConfig(ppa=PPAParams(ppa_base_price_eur_mwh=ppa_value))
+                                    debt_cfg = DebtConfig(senior=SeniorDebtParams(
+                                        gearing_ratio=0.75, tenor_years=14,
+                                        base_rate=0.03, margin_bps=265,
+                                        target_dscr=1.15, min_dscr_lockup=1.10,
+                                        dsra_months=6,
+                                    ))
+                                    tax_p = TaxParams(corporate_tax_rate=0.10)
+                                    rebuilt = build_inputs_from_ui(tech_cfg, rev_cfg, debt_cfg, tax_p)
+                                    
+                                    freq = PF.SEMESTRIAL if rebuilt.info.period_frequency.name == "SEMESTRIAL" else PF.ANNUAL
+                                    eng = PeriodEngine(
+                                        financial_close=rebuilt.info.financial_close,
+                                        construction_months=rebuilt.info.construction_months,
+                                        horizon_years=rebuilt.info.horizon_years,
+                                        ppa_years=rebuilt.revenue.ppa_term_years,
+                                        frequency=freq,
+                                    )
+                                    
+                                    rate_sched = build_rate_schedule(
+                                        base_rate_type="FLAT",
+                                        tenor_periods=14 * 2, periods_per_year=2,
+                                        base_rate_override=0.03 / 2,
+                                        floating_share=0.2, fixed_share=0.8,
+                                        hedge_coverage=0.8, margin_bps=265,
+                                        base_rate_floor=0.0,
+                                    )
+                                    
+                                    res = cached_run_waterfall_v3(
+                                        inputs=rebuilt, engine=eng,
+                                        rate_per_period=0.03 / 2,
+                                        tenor_periods=14 * 2,
+                                        target_dscr=1.15,
+                                        lockup_dscr=1.10,
+                                        tax_rate=0.10,
+                                        dsra_months=6,
+                                        shl_amount=0.0,
+                                        shl_rate=0.06,
+                                        discount_rate_project=0.0641,
+                                        discount_rate_equity=0.0965,
+                                        rate_schedule=rate_sched,
+                                    )
+                                    irr = res.equity_irr if irr_basis == "equity" else res.project_irr
+                                    return irr, res
+                                
+                                # Get inputs from session as dict
+                                inputs_as_dict = st.session_state.get('inputs', {})
+                                result_gs = solve_ppa_for_target_irr(
+                                    inputs_as_dict,
+                                    target_irr,
+                                    irr_basis,
+                                    bracket_low,
+                                    bracket_high,
+                                    waterfall_fn=waterfall_runner,
+                                )
+                                
+                                if result_gs.success:
+                                    st.success(f"✅ Required PPA: {result_gs.solved_value:.2f} EUR/MWh")
+                                    st.metric("Achieved IRR", f"{result_gs.achieved_metric*100:.3f}%")
+                                    st.caption(f"Converged in {result_gs.iterations} iterations")
+                                    st.session_state.goal_seek_result = result_gs
+                                else:
+                                    st.error(f"❌ {result_gs.error_message}")
+                            except Exception as gs_err:
+                                st.error(f"Goal seek failed: {gs_err}")
+                    
+                    # Save as new scenario button
+                    if st.session_state.get("goal_seek_result"):
+                        r = st.session_state.goal_seek_result
+                        if r.success and st.button("💾 Save as New Scenario", key="gk_save_ppa"):
+                            from persistence.database import get_engine
+                            from persistence.repository import ScenarioRepository
+                            from sqlalchemy.orm import sessionmaker
+                            engine = get_engine()
+                            Sm = sessionmaker(bind=engine, expire_on_commit=False)
+                            sc_repo = ScenarioRepository(Sm())
+                            
+                            new_sc = sc_repo.branch_scenario(
+                                st.session_state.active_scenario_id,
+                                f"Goal Seek — IRR {target_irr*100:.1f}%"
+                            )
+                            # Update PPA in stored inputs
+                            inputs = st.session_state.get('inputs', {})
+                            if inputs and 'revenue' in inputs:
+                                inputs['revenue']['ppa_base_tariff'] = r.solved_value
+                            from persistence.repository import ProjectRepository
+                            db = ProjectRepository(Sm())
+                            db.save_inputs(new_sc.id, inputs)
+                            st.session_state.active_scenario_id = new_sc.id
+                            st.rerun()
+                
+                with tab2:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        target_dscr_gs = st.number_input(
+                            "Target Avg DSCR", value=1.30, step=0.01,
+                            key="gk_dscr_target"
+                        )
+                        dscr_basis_gs = st.selectbox(
+                            "DSCR basis", ["avg", "min", "median"],
+                            key="gk_dscr_basis"
+                        )
+                    with col2:
+                        sculpt_gs = st.checkbox(
+                            "Sculpted repayment", value=True,
+                            key="gk_sculpt"
+                        )
+                    
+                    if st.button("🔍 Solve for Max Debt", key="gk_solve_debt"):
+                        with st.spinner("Solving max debt for target DSCR..."):
+                            try:
+                                from core.finance.goal_seek import solve_debt_for_target_dscr
+                                inputs_as_dict = st.session_state.get('inputs', {})
+                                result_ds = solve_debt_for_target_dscr(
+                                    inputs_as_dict,
+                                    target_dscr_gs,
+                                    dscr_basis_gs,
+                                    sculpt_gs,
+                                )
+                                if result_ds.success:
+                                    st.success(f"✅ Max Debt: {result_ds.debt_amount_keur:,.0f} kEUR")
+                                    st.metric("Achieved DSCR", f"{result_ds.achieved_dscr:.3f}x")
+                                    st.metric("Implied Gearing", f"{result_ds.implied_gearing*100:.1f}%")
+                                    st.session_state.goal_seek_debt_result = result_ds
+                                else:
+                                    st.error(f"❌ {result_ds.error_message}")
+                            except Exception as ds_err:
+                                st.error(f"Debt solver failed: {ds_err}")
+            
+            # Cache indicator
+            if st.session_state.get("result_from_cache"):
+                st.caption("⚡ Results from cache")
+            else:
+                elapsed = 0.0
+                import time
+                st.caption(f"🔄 Computed in {elapsed:.1f}s")
             
         except Exception as e:
             st.error(f"Waterfall calculation failed: {str(e)}")
