@@ -147,6 +147,7 @@ def atad_adjustment(
     interest_keur: float,
     ebitda_keur: float,
     atad_ebitda_limit: float = 0.30,
+    atad_min_interest_keur: float = 3000.0,
 ) -> tuple[float, float]:
     """Calculate ATAD adjustment for excess interest.
     
@@ -157,11 +158,12 @@ def atad_adjustment(
         interest_keur: Total interest in kEUR
         ebitda_keur: EBITDA in kEUR
         atad_ebitda_limit: ATAD EBITDA limit percentage
+        atad_min_interest_keur: Minimum interest threshold (default 3000.0)
     
     Returns:
         (deductible_interest, excess_interest_addback)
     """
-    limit = atad_limit(ebitda_keur, atad_ebitda_limit)
+    limit = atad_limit(ebitda_keur, atad_ebitda_limit, atad_min_interest_keur=atad_min_interest_keur)
     
     if interest_keur <= limit:
         return interest_keur, 0.0
