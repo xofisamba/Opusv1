@@ -101,7 +101,7 @@ class TestFidDeckExcel:
         export_fid_deck_excel(result, oborovo_inputs, temp_xlsx)
 
         sheets = _load_excel_sheets(temp_xlsx)
-        expected = ["FID deck outputs", "P&L", "BS", "CF", "Returns", "DS"]
+        expected = ["FID deck outputs", "P&L", "BS", "CF", "Returns", "DS", "Spider Table", "Two-Way Heatmap"]
         assert sheets == expected, f"Sheet names mismatch: got {sheets}"
 
     def test_project_irr_within_tolerance_and_solver_accurate(
@@ -204,7 +204,7 @@ class TestFidDeckExcel:
         # Must not raise
         from openpyxl import load_workbook
         wb = load_workbook(temp_xlsx)
-        assert len(wb.sheetnames) == 6
+        assert len(wb.sheetnames) == 8
         # Cover sheet must have data
         ws_cover = wb["FID deck outputs"]
         assert ws_cover["A1"].value is not None
