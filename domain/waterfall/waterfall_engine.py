@@ -440,8 +440,11 @@ def run_waterfall(
         equity_investment = sculpt_capex_keur - sculpt_result.debt_keur
         equity_cfs = [-equity_investment]
     elif equity_irr_method == "shl_interest_only":
-        # TUHO style: investor puts in SHL + share capital, receives SHL interest as cash flow
-        # equity_investment = SHL principal + share capital
+        # TUHO bullet SHL: investor puts in SHL + share capital, receives SHL interest + principal at maturity
+        equity_investment = shl_amount + share_capital_keur
+        equity_cfs = [-equity_investment]
+    elif equity_irr_method == "shl_plus_dividends":
+        # TUHO amortizing SHL: equity CF = SHL interest + SHL principal + dividends
         equity_investment = shl_amount + share_capital_keur
         equity_cfs = [-equity_investment]
     else:
@@ -685,10 +688,12 @@ def run_waterfall(
         project_cfs.append(ebitda - tax_this_period if ebitda else 0)
         # Equity CF depends on method:
         if equity_irr_method == "shl_interest_only":
-            # TUHO: equity CF = SHL interest + principal at maturity
-            # The sponsor put in SHL (principal) + share capital at Y0
-            # They receive interest each period, and principal back at maturity
-            equity_cf_for_period = shi + shp  # interest + principal repayment in final period
+            # TUHO bullet SHL: equity CF = SHL interest + principal at maturity
+            equity_cf_for_period = shi + shp  # interest + principal in final period
+        elif equity_irr_method == "shl_plus_dividends":
+            # TUHO amortizing SHL: equity CF = SHL interest + SHL principal + dividends
+            # SHL amortizes Y14-Y20 (after senior debt), dividends start Y19+
+            equity_cf_for_period = shi + shp + dist  # interest + principal + distribution
         else:
             # combined/equity_only: equity CF = distributions to equity
             equity_cf_for_period = dist

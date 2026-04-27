@@ -734,7 +734,7 @@ class ProjectInputs:
             fixed_ds_keur=2116.0,  # Fixed semi-annual debt service from Excel (DS = 2,116 kEUR)
             debt_sizing_method="fixed",  # TUHO: Excel Macro uses avg DSCR 1.45x target
             fixed_debt_keur=43359.0,  # Excel-verified debt amount (hardcoded from Excel)
-            equity_irr_method="shl_interest_only",  # TUHO: equity CF = SHL interest only (brief Sprint 13)
+            equity_irr_method="shl_plus_dividends",  # TUHO: equity CF = SHL interest only (brief Sprint 13)
         )
 
         tax = TaxParams(
