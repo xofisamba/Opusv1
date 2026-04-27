@@ -40,6 +40,8 @@ CURRENT_PATH = Path(__file__).parent / "fixtures" / "current_outputs.json"
 def _run_waterfall():
     """Run waterfall with default Oborovo inputs. Cached per session."""
     inputs = ProjectInputs.create_default_oborovo()
+    fin = inputs.financing
+    capex = inputs.capex
     freq = PF.SEMESTRIAL if inputs.info.period_frequency == PeriodFrequency.SEMESTRIAL else PF.ANNUAL
     engine = PeriodEngine(
         financial_close=inputs.info.financial_close,
@@ -48,21 +50,21 @@ def _run_waterfall():
         ppa_years=inputs.revenue.ppa_term_years,
         frequency=freq,
     )
-    rate = 0.0565 / 2  # semi-annual
-    tenor_periods = 28
 
     result = cached_run_waterfall_v3(
         inputs=inputs, engine=engine,
-        rate_per_period=rate, tenor_periods=tenor_periods,
-        target_dscr=inputs.financing.target_dscr,
-        lockup_dscr=inputs.financing.lockup_dscr,
+        rate_per_period=fin.all_in_rate / 2,
+        tenor_periods=fin.senior_tenor_years * 2,
+        target_dscr=fin.target_dscr,
+        lockup_dscr=fin.lockup_dscr,
         tax_rate=inputs.tax.corporate_rate,
-        dsra_months=inputs.financing.dsra_months,
-        shl_amount=inputs.financing.shl_amount_keur,
-        shl_rate=inputs.financing.shl_rate,
-        discount_rate_project=0.0641,
-        discount_rate_equity=0.0965,
-        fixed_debt_keur=None,
+        dsra_months=fin.dsra_months,
+        shl_amount=fin.shl_amount_keur,
+        shl_rate=fin.shl_rate,
+        equity_irr_method=getattr(fin, 'equity_irr_method', 'equity_only'),
+        share_capital_keur=fin.share_capital_keur,
+        sculpt_capex_keur=getattr(capex, 'sculpt_capex_keur', capex.total_capex),
+        debt_sizing_method=getattr(fin, 'debt_sizing_method', 'dscr_sculpt'),
     )
     return result
 

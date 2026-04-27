@@ -367,6 +367,8 @@ def cached_run_waterfall_v3(
     rate_schedule: list[float] | None = None,  # Per-period rate schedule (Euribor curve)
     equity_irr_method: str = "equity_only",  # "equity_only" | "combined"
     share_capital_keur: float = 0.0,  # Only used when equity_irr_method="combined"
+    sculpt_capex_keur: float = 0.0,  # CAPEX for equity base; used in "combined" method for equity_irr = sculpt_capex - debt
+    debt_sizing_method: str = "dscr_sculpt",  # "dscr_sculpt" | "gearing_cap" | "fixed"
 ) -> "WaterfallResult":
     """Cached waterfall computation with proper hash_funcs.
 
@@ -459,4 +461,6 @@ def cached_run_waterfall_v3(
         commitment_fees_keur=inputs.capex.commitment_fees_keur,
         equity_irr_method=equity_irr_method,
         share_capital_keur=share_capital_keur,
+        sculpt_capex_keur=sculpt_capex_keur,
+        debt_sizing_method=debt_sizing_method,
     )

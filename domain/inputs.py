@@ -312,6 +312,12 @@ class FinancingParams:
     # "combined" → IRR base = share_capital + SHL, cash flows include SHL interest + principal (Oborovo style)
     equity_irr_method: str = "equity_only"
 
+    # Debt sizing method:
+    # "dscr_sculpt" → debt = min(DSCR-constrained, gearing_cap) — default
+    # "gearing_cap" → debt = max(DSCR-constrained, gearing_cap) — gearing wins (Oborovo style)
+    # "fixed" → debt = fixed_debt_keur (override)
+    debt_sizing_method: str = "dscr_sculpt"
+
     @property
     def all_in_rate(self) -> float:
         """All-in interest rate (base + margin)."""
@@ -538,6 +544,7 @@ class ProjectInputs:
             min_llcr=1.15,
             dsra_months=6,
             equity_irr_method="combined",  # Oborovo uses combined SHL+equity method
+            debt_sizing_method="gearing_cap",  # Oborovo: gearing-based sizing (not DSCR-sculpted)
         )
 
         tax = TaxParams(

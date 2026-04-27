@@ -218,9 +218,12 @@ def run_waterfall(
     commitment_fees_keur: float = 0.0,
     opex_schedule: list[float] | None = None,  # Per-period OPEX. If None, inferred from rev-ebitda.
     prior_tax_loss_keur: float = 0.0,  # Initial tax loss carryforward from construction period
-    # Equity IRR method: "equity_only" = capex-debt-SHL (TUHO), "combined" = share_capital+SHL (Oborovo)
+    # Equity IRR method: "equity_only" = capex-debt-SHL (TUHO), "combined" = capex-debt (Oborovo)
     equity_irr_method: str = "equity_only",
     share_capital_keur: float = 0.0,  # Only used when equity_irr_method="combined"
+    sculpt_capex_keur: float = 0.0,  # CAPEX for equity base (ex-IDC); used in "combined" method for equity_irr = sculpt_capex - debt
+    # Debt sizing method: "dscr_sculpt" = min(DSCR-based, gearing_cap), "gearing_cap" = max(gearing, dscr) — gearing wins
+    debt_sizing_method: str = "dscr_sculpt",
 ) -> WaterfallResult:
     """Run full waterfall with iterative debt sculpting.
 
@@ -259,18 +262,73 @@ def run_waterfall(
             rate_schedule = rate_schedule[:tenor_periods]
     cfads_for_sculpt = ebitda_schedule[:tenor_periods]
     
+    # Compute DSCR-constrained debt (no gearing cap) as base
     sculpt_result = closed_form_sculpt(
         cfads_schedule=cfads_for_sculpt,
         rate_schedule=rate_schedule,
         tenor_periods=tenor_periods,
         target_dscr=target_dscr,
-        gearing_cap_keur=total_capex * gearing_ratio,  # P90 sizing: min(gearing-based, DSCR-based)
+        gearing_cap_keur=float('inf'),  # No gearing constraint — we handle it below
     )
+    dscr_debt = sculpt_result.debt_keur
     
-    # If fixed_debt_keur is provided (e.g., from P90 sizing run), override the sculpted debt
-    if fixed_debt_keur is not None and fixed_debt_keur > 0 and sculpt_result.balance_schedule[0] > 0:
-        scale = fixed_debt_keur / sculpt_result.balance_schedule[0]
-        # Scale balance schedule so it starts at fixed_debt_keur
+    # Compute gearing cap based on sculpt_capex (ex-IDC capex)
+    # Use sculpt_capex if provided (> 0), otherwise fall back to total_capex for sizing
+    sizing_base = sculpt_capex_keur if sculpt_capex_keur > 0 else total_capex
+    gearing_cap_keur = sizing_base * gearing_ratio
+    
+    # Apply debt sizing method
+    if debt_sizing_method == "gearing_cap":
+        # Gearing wins: use max of DSCR-constrained and gearing cap
+        sizing_debt = max(dscr_debt, gearing_cap_keur)
+    else:
+        # Default: DSCR wins (min of DSCR and gearing)
+        sizing_debt = min(dscr_debt, gearing_cap_keur)
+    
+    # If fixed_debt_keur is provided, it overrides everything
+    if fixed_debt_keur is not None and fixed_debt_keur > 0:
+        sizing_debt = fixed_debt_keur
+    
+    # Rescale balance schedule if sizing_debt differs from dscr_debt
+    if abs(sizing_debt - dscr_debt) > 0.01 and (fixed_debt_keur is None or fixed_debt_keur <= 0):
+        scale = sizing_debt / dscr_debt if dscr_debt > 0 else 1.0
+        balance_schedule = [b * scale for b in sculpt_result.balance_schedule]
+        allowable_ds = [ds * scale for ds in [
+            cfads_for_sculpt[t] / target_dscr for t in range(tenor_periods)
+        ]]
+        interest_schedule = []
+        principal_schedule = []
+        payment_schedule = []
+        dscr_schedule = []
+        balance = sizing_debt
+        for t in range(tenor_periods):
+            interest = balance * rate_schedule[t]
+            principal = max(0.0, min(allowable_ds[t] - interest, balance))
+            payment = interest + principal
+            dscr = cfads_for_sculpt[t] / payment if payment > 0 else float('inf')
+            interest_schedule.append(interest)
+            principal_schedule.append(principal)
+            payment_schedule.append(payment)
+            dscr_schedule.append(dscr)
+            balance = max(0.0, balance - principal)
+        valid_dsrs = [d for d in dscr_schedule if not (d == float('inf'))]
+        avg_dscr = sum(valid_dsrs) / len(valid_dsrs) if valid_dsrs else 0.0
+        min_dscr = min(valid_dsrs) if valid_dsrs else 0.0
+        sculpt_result = replace(
+            sculpt_result,
+            debt_keur=sizing_debt,
+            balance_schedule=balance_schedule,
+            interest_schedule=interest_schedule,
+            principal_schedule=principal_schedule,
+            payment_schedule=payment_schedule,
+            dscr_schedule=dscr_schedule,
+            avg_dscr=avg_dscr,
+            min_dscr=min_dscr,
+        )
+        payments = payment_schedule  # Use the rescaled payment schedule
+    elif fixed_debt_keur is not None and fixed_debt_keur > 0:
+        # Rescale from dscr_debt to fixed_debt
+        scale = fixed_debt_keur / dscr_debt if dscr_debt > 0 else 1.0
         balance_schedule = [b * scale for b in sculpt_result.balance_schedule]
         # Recompute payments based on scaled balances: allowable_ds = fixed_debt / target_dscr
         allowable_ds_scaled = [fixed_debt_keur / target_dscr] * tenor_periods
@@ -367,9 +425,10 @@ def run_waterfall(
     # For returns calculation
     # Two methods for equity IRR:
     # "equity_only": equity_investment = capex - debt - SHL, equity_cfs = distributions only (TUHO)
-    # "combined": equity_investment = share_capital + SHL, equity_cfs = SHL service + distributions (Oborovo)
+    # "combined": equity_investment = sculpt_capex - debt, equity_cfs = distributions only (Oborovo)
     if equity_irr_method == "combined":
-        equity_investment = share_capital_keur + shl_amount
+        # Oborovo: equity base = sculpt_capex (ex-IDC) - debt; equity CFs = distributions only
+        equity_investment = sculpt_capex_keur - sculpt_result.debt_keur
         equity_cfs = [-equity_investment]
     else:
         # TUHO style: SHL is repaid as bullet at maturity, reduces equity CF but not equity base
@@ -611,7 +670,7 @@ def run_waterfall(
         # Project IRR = unlevered (EBITDA - Tax), equity IRR = levered (distributions)
         project_cfs.append(ebitda - tax_this_period if ebitda else 0)
         # For "combined" method (Oborovo): include SHL service in equity cash flows
-        equity_cf_for_period = shl_svc + dist if equity_irr_method == "combined" else dist
+        equity_cf_for_period = dist  # combined method: distributions only (SHL is treated as separate debt-like instrument)
         equity_cfs.append(equity_cf_for_period)
     
     # Calculate returns - prepend financial_close date for initial investment
