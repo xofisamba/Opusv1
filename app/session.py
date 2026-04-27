@@ -298,6 +298,7 @@ def init_session_state() -> None:
 
     On first run (no active project in session state):
     - Initialize the DB (create tables)
+    - Seed Oborovo Solar and TUHO Wind default projects
     - Create a default project with one Base Case scenario
     - Store project/scenario IDs in session state
     - Load blank default inputs into session state
@@ -311,11 +312,58 @@ def init_session_state() -> None:
     import streamlit as st
     from persistence.database import init_db, get_engine
     from persistence.repository import ProjectRepository, ScenarioRepository
+    from domain.inputs import ProjectInputs
 
     # Ensure DB exists
     engine = get_engine()
     init_db(engine)
     Sm = sessionmaker(bind=engine, expire_on_commit=False)
+
+    def _convert_inputs_to_nested(inputs) -> dict:
+        """Convert ProjectInputs to nested dict for DB storage."""
+        from datetime import date, datetime
+        from dataclasses import is_dataclass, asdict
+
+        def _to_serializable(obj):
+            if isinstance(obj, (date, datetime)):
+                return obj.isoformat()
+            if is_dataclass(obj):
+                return {k: _to_serializable(v) for k, v in asdict(obj).items() if not k.startswith("_")}
+            if isinstance(obj, list):
+                return [_to_serializable(x) for x in obj]
+            if isinstance(obj, dict):
+                return {k: _to_serializable(v) for k, v in obj.items() if not k.startswith("_")}
+            return obj
+
+        return _to_serializable(inputs)
+
+    def _seed_default_projects(repo: ProjectRepository) -> None:
+        """Seed Oborovo Solar and TUHO Wind projects if not already present."""
+        existing = [p.name for p in repo.list_projects()]
+        defaults = [
+            (
+                "Oborovo Solar",
+                ProjectInputs.create_default_oborovo(),
+                "75.26 MW Solar PV | COD 2030 | PPA 14 god | IRR ~10.6%",
+            ),
+            (
+                "TUHO Wind",
+                ProjectInputs.create_default_tuho_wind1(),
+                "35 MW Wind (5×7MW) | COD 2029 | tenor 14 god | IRR ~9.3%",
+            ),
+        ]
+        for name, inputs, desc in defaults:
+            if name not in existing:
+                proj = repo.create_project(name, description=desc)
+                base = proj.scenarios[0]
+                inputs_dict = _convert_inputs_to_nested(inputs)
+                repo.save_inputs(base.id, inputs_dict)
+
+    # Seed default projects on first run
+    if "projects_seeded" not in st.session_state:
+        db = ProjectRepository(Sm())
+        _seed_default_projects(db)
+        st.session_state.projects_seeded = True
 
     # Bootstrap: create flat session state keys from DEFAULTS
     for key, value in DEFAULTS.items():

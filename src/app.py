@@ -1365,40 +1365,96 @@ def main():
                 st.session_state.inputs = inputs_nested
                 st.rerun()
         
-        # List existing projects
-        try:
-            from persistence.database import get_engine
-            from persistence.repository import ProjectRepository
-            from sqlalchemy.orm import sessionmaker
+        # === Sprint 6: Project Selector ===
+        st.subheader("📂 Projects")
+        
+        # Project dropdown selector
+        project_names = {p.name: p.id for p in projects}
+        if not project_names:
+            st.info("No projects yet — create one above.")
+        else:
+            selected_name = st.selectbox(
+                "Select Project",
+                options=list(project_names.keys()),
+                key="project_selector",
+            )
+            selected_id = project_names[selected_name]
             
-            engine = get_engine()
-            Sm = sessionmaker(bind=engine, expire_on_commit=False)
-            db = ProjectRepository(Sm())
-            projects = db.list_projects()
+            # Load inputs when project changes
+            if st.session_state.get('active_project_id') != selected_id:
+                st.session_state.active_project_id = selected_id
+                sc_repo = ScenarioRepository(Sm())
+                scenarios = sc_repo.list_scenarios(selected_id)
+                base = scenarios[0] if scenarios else None
+                if base:
+                    st.session_state.active_scenario_id = base.id
+                    inputs = db.load_inputs(base.id)
+                    st.session_state.inputs = inputs
+                    st.rerun()
             
-            if projects:
-                st.subheader("📂 Existing Projects")
-                cols = st.columns(min(len(projects), 3))
-                for i, proj in enumerate(projects[:3]):
-                    with cols[i % 3]:
-                        with st.container():
-                            st.markdown(f"**{proj.name}**")
-                            st.caption(f"{proj.technology_type} | {proj.description or 'No description'}")
-                            if st.button(f"Open", key=f"open_proj_{proj.id}"):
-                                # Load first scenario
-                                sc_repo = ScenarioRepository(Sm())
-                                scenarios = sc_repo.list_scenarios(proj.id)
-                                base = scenarios[0] if scenarios else None
-                                if base:
-                                    st.session_state.active_project_id = proj.id
-                                    st.session_state.active_scenario_id = base.id
-                                    inputs = db.load_inputs(base.id)
-                                    st.session_state.inputs = inputs
-                                    st.rerun()
-            else:
-                st.info("No existing projects. Create one above to get started.")
-        except Exception as e:
-            st.warning(f"Could not load projects: {e}")
+            # Save and Duplicate buttons
+            col_save, col_dup = st.columns(2)
+            with col_save:
+                if st.button("💾 Spremi", use_container_width=True, key="btn_save_project"):
+                    active_sc = st.session_state.get('active_scenario_id')
+                    if active_sc and st.session_state.get('inputs'):
+                        inputs_dict = _convert_inputs_to_nested(st.session_state.inputs)
+                        db.save_inputs(active_sc, inputs_dict)
+                        st.sidebar.success("✓ Spremljeno")
+            with col_dup:
+                if st.button("📋 Kopiraj", use_container_width=True, key="btn_dup_project"):
+                    new_proj = db.duplicate_project(selected_id)
+                    st.rerun()
+            
+            # Quick stats — run waterfall if result not cached
+            try:
+                inputs = st.session_state.get('inputs')
+                if inputs and st.button("📊 Izračunaj", use_container_width=True, key="btn_run_quick"):
+                    with st.spinner("Računam..."):
+                        from utils.cache import cached_run_waterfall_v3
+                        from domain.period_engine import PeriodEngine, PeriodFrequency as PF
+                        from app.session import _project_inputs_to_flat
+                        
+                        engine = PeriodEngine(
+                            financial_close=inputs.info.financial_close,
+                            construction_months=inputs.info.construction_months,
+                            horizon_years=inputs.info.horizon_years,
+                            ppa_years=inputs.revenue.ppa_term_years,
+                            frequency=PF.SEMESTRIAL,
+                        )
+                        periods = list(engine.periods())
+                        rate = inputs.financing.all_in_rate / 2
+                        tenor = inputs.financing.senior_tenor_years * 2
+                        
+                        result = cached_run_waterfall_v3(
+                            inputs=inputs,
+                            engine=engine,
+                            rate_per_period=rate,
+                            tenor_periods=tenor,
+                            target_dscr=inputs.financing.target_dscr,
+                            lockup_dscr=inputs.financing.lockup_dscr,
+                            tax_rate=inputs.tax.corporate_rate,
+                            dsra_months=inputs.financing.dsra_months,
+                            shl_amount=inputs.financing.shl_amount_keur,
+                            shl_rate=inputs.financing.shl_rate,
+                            fixed_ds_keur=getattr(inputs.financing, 'fixed_ds_keur', None),
+                            equity_irr_method=getattr(inputs.financing, 'equity_irr_method', 'equity_only'),
+                            share_capital_keur=getattr(inputs.financing, 'share_capital_keur', 0.0),
+                        )
+                        st.session_state.result = result
+                        st.session_state.periods = periods
+            except Exception as e:
+                st.caption(f"计算错误: {e}")
+            
+            # Show cached result metrics
+            result = st.session_state.get('result')
+            if result:
+                st.divider()
+                st.caption("**Quick Stats**")
+                st.metric("Equity IRR", f"{result.equity_irr:.2%}")
+                st.metric("Avg DSCR", f"{result.avg_dscr:.3f}")
+                if hasattr(result, 'sculpting_result'):
+                    st.metric("Debt", f"{result.sculpting_result.debt_keur/1000:.1f}M EUR")
         
         st.stop()  # Don't show main app until project selected
     
