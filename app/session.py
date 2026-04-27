@@ -382,31 +382,43 @@ def init_session_state() -> None:
 
     # Check if we have an active project
     if 'active_project_id' not in st.session_state:
-        # No active project — create a default one
         db = ProjectRepository(Sm())
         sc_repo = ScenarioRepository(Sm())
+        projects = db.list_projects()
 
-        proj = db.create_project("My Solar Project", "solar", "Auto-created project")
-        base = proj.scenarios[0]  # Base Case already created
+        if projects:
+            # Učitaj prvi seedani projekt (Oborovo) kao default aktivni projekt
+            proj = projects[0]
+            base = next((s for s in proj.scenarios if s.is_base_case), proj.scenarios[0])
 
-        # Build default inputs from flat DEFAULTS
-        defaults = get_defaults()
-        inputs_nested = _defaults_to_project_inputs(defaults)
+            st.session_state.active_project_id = proj.id
+            st.session_state.active_scenario_id = base.id
 
-        # Save to DB
-        db.save_inputs(base.id, inputs_nested)
+            stored_inputs = db.load_inputs(base.id)
+            st.session_state.inputs = stored_inputs
 
-        # Store IDs in session state
-        st.session_state.active_project_id = proj.id
-        st.session_state.active_scenario_id = base.id
+            if stored_inputs:
+                flat = _project_inputs_to_flat(stored_inputs)
+                for k, v in flat.items():
+                    if k not in st.session_state:
+                        st.session_state[k] = v
+            st.session_state.result_from_cache = False
+        else:
+            # Fallback: DB je potpuno prazna — kreiraj novi projekt
+            proj = db.create_project("My Solar Project", "solar", "Auto-created project")
+            base = proj.scenarios[0]
 
-        # Also store the nested inputs dict in session state
-        st.session_state.inputs = inputs_nested
-        st.session_state.result_from_cache = False
+            defaults = get_defaults()
+            inputs_nested = _defaults_to_project_inputs(defaults)
+            db.save_inputs(base.id, inputs_nested)
+
+            st.session_state.active_project_id = proj.id
+            st.session_state.active_scenario_id = base.id
+            st.session_state.inputs = inputs_nested
+            st.session_state.result_from_cache = False
     else:
         # Active project exists — load inputs from DB
         db = ProjectRepository(Sm())
-        sc_repo = ScenarioRepository(Sm())
 
         active_scenario_id = st.session_state.get('active_scenario_id')
         if active_scenario_id:
