@@ -343,18 +343,20 @@ def init_session_state() -> None:
         defaults = [
             (
                 "Oborovo Solar",
+                "solar",
                 ProjectInputs.create_default_oborovo(),
                 "75.26 MW Solar PV | COD 2030 | PPA 14 god | IRR ~10.6%",
             ),
             (
                 "TUHO Wind",
+                "wind",
                 ProjectInputs.create_default_tuho_wind1(),
                 "35 MW Wind (5×7MW) | COD 2029 | tenor 14 god | IRR ~9.3%",
             ),
         ]
-        for name, inputs, desc in defaults:
+        for name, tech_type, inputs, desc in defaults:
             if name not in existing:
-                proj = repo.create_project(name, description=desc)
+                proj = repo.create_project(name, tech_type=tech_type, description=desc)
                 base = proj.scenarios[0]
                 inputs_dict = _convert_inputs_to_nested(inputs)
                 repo.save_inputs(base.id, inputs_dict)
