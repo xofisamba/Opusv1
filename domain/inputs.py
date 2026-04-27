@@ -300,6 +300,10 @@ class FinancingParams:
     lockup_dscr: float = 1.10           # Inputs!D223 - Lockup DSCR threshold (1.10x)
     min_llcr: float = 1.15             # Inputs!D224 - Minimum LLCR (1.15x)
 
+    # Amortization type: "sculpted" (DSCR-based, OBOROVO) or "fixed_ds" (fixed debt service, TUHO)
+    amortization_type: str = "sculpted"  # "sculpted" | "fixed_ds"
+    fixed_ds_keur: float = 0.0           # Fixed debt service per period (kEUR) — for fixed_ds type
+
     # Reserve accounts
     dsra_months: int = 6               # Inputs!D348 - DSRA funding months (6)
 
@@ -708,6 +712,8 @@ class ProjectInputs:
             lockup_dscr=1.10,
             min_llcr=1.15,
             dsra_months=6,
+            amortization_type="fixed_ds",  # TUHO uses fixed DS (annuity-like), not sculpted
+            fixed_ds_keur=2116.0,  # Fixed semi-annual debt service from Excel (DS = 2,116 kEUR)
         )
 
         tax = TaxParams(

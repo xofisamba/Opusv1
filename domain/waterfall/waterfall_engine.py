@@ -210,6 +210,7 @@ def run_waterfall(
     financial_close: 'date' = None,
     gearing_ratio: float = 0.80,  # Used for sizing cap in closed_form_sculpt
     fixed_debt_keur: float | None = None,  # Override sculpted debt (for P90 sizing scenarios)
+    fixed_ds_keur: float | None = None,  # Fixed debt service per period (kEUR) — for TUHO annuity-type amortization
     rate_schedule: list[float] | None = None,  # Per-period rate schedule (Euribor curve). If None, uses flat rate_per_period.
     # Fiscal reintegration components (IDC + bank fees + commitment fees during construction)
     idc_keur: float = 0.0,
@@ -295,7 +296,36 @@ def run_waterfall(
         interest_schedule = sculpt_result.interest_schedule
         principal_schedule = sculpt_result.principal_schedule
         balance_schedule = sculpt_result.balance_schedule
-    
+
+    # Override with fixed debt service if provided (TUHO-style annuity)
+    if fixed_ds_keur is not None and fixed_ds_keur > 0:
+        fixed_ds = fixed_ds_keur
+        payments = [fixed_ds] * tenor_periods
+        # First compute principal based on sculpted balances (initial approximation)
+        interest_schedule = [balance_schedule[t] * rate_schedule[t] for t in range(tenor_periods)]
+        principal_schedule = [max(0.0, fixed_ds - interest_schedule[t]) for t in range(tenor_periods)]
+        principal_schedule = [
+            min(principal_schedule[t], max(0.0, balance_schedule[t]))
+            for t in range(tenor_periods)
+        ]
+        debt = balance_schedule[0]  # Initial debt from balance schedule
+        # Recompute proper declining balance schedule for fixed DS amortization
+        # (sculpted balance_schedule doesn't match fixed_DS principal_schedule)
+        balance_schedule_fixed = [debt]
+        bal = debt
+        for t in range(tenor_periods):
+            bal = max(0.0, bal - principal_schedule[t])
+            balance_schedule_fixed.append(bal)
+        balance_schedule = balance_schedule_fixed
+        # Recompute interest_schedule using the corrected balance_schedule
+        interest_schedule = [balance_schedule[t] * rate_schedule[t] for t in range(tenor_periods)]
+        # Recompute principal_schedule using corrected interest
+        principal_schedule = [max(0.0, fixed_ds - interest_schedule[t]) for t in range(tenor_periods)]
+        principal_schedule = [
+            min(principal_schedule[t], max(0.0, balance_schedule[t]))
+            for t in range(tenor_periods)
+        ]
+
     # Step 2: Run waterfall for each period
     waterfall_periods = []
     
