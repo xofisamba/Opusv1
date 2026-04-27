@@ -3,6 +3,7 @@
 Provides init_session_state() and defaults dict.
 """
 from datetime import date
+from enum import Enum
 from typing import Any, Optional
 from sqlalchemy.orm import sessionmaker
 
@@ -327,6 +328,8 @@ def init_session_state() -> None:
         def _to_serializable(obj):
             if isinstance(obj, (date, datetime)):
                 return obj.isoformat()
+            if isinstance(obj, Enum):
+                return obj.value
             if is_dataclass(obj):
                 return {k: _to_serializable(v) for k, v in asdict(obj).items() if not k.startswith("_")}
             if isinstance(obj, list):
