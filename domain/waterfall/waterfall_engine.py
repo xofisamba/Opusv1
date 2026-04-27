@@ -521,6 +521,9 @@ def run_waterfall(
             senior_ds = 0
         op_period_counter += 1
         
+        # Remaining senior debt balance for this period
+        remaining_senior_balance = balance_schedule[period_in_tenor] if period_in_tenor < len(balance_schedule) else 0
+        
         # SHL service — amortizing or bullet based on equity_irr_method
         # For "shl_plus_dividends": SHL amortizes from Y14 (period 28) to Y20 (period 40)
         # For "shl_interest_only": SHL is bullet (full principal at maturity)
@@ -529,14 +532,11 @@ def run_waterfall(
         
         if shl_balance > 0:
             shi = shl_balance * shl_rate / 2  # Semi-annual interest
-            if equity_irr_method == "shl_plus_dividends" and period_in_tenor >= shl_amort_start_period:
-                # Amortizing SHL: repay principal over remaining periods (Y14-Y20 = 13 semi-annual periods)
-                # Fixed 13 semi-annual periods for SHL amort (Y14-Y20 = 13 periods)
-                shl_amort_total_periods = 13
-                periods_into_amort = period_in_tenor - shl_amort_start_period
-                remaining_amort_periods = max(1, shl_amort_total_periods - periods_into_amort)
-                # Equal amortization: principal per period = balance / remaining periods
-                shp = min(shl_balance, shl_balance / remaining_amort_periods)
+            if equity_irr_method == "shl_plus_dividends" and remaining_senior_balance <= 0:
+                # Senior debt repaid, use FCF for SHL: shp = min(cf_after_reserves, shl_balance)
+                # But we need to use the value set in the distribution section
+                # When dist=0 and shl_balance>0, shl_repayment was set to cf_after_reserves
+                shp = min(shl_balance, max(0, cf_after_reserves))
             elif equity_irr_method == "shl_interest_only" and period_in_tenor == tenor_periods - 1:
                 # Bullet SHL: repay full balance at last period
                 shp = shl_balance
@@ -615,25 +615,60 @@ def run_waterfall(
         if lockup:
             lockup_count += 1
         
-        # Distribution (after lockup check and cash sweep)
-        # Single update to cum_distribution — no double-counting
+        # Distribution with SHL amortization priority
+        # Cash flow waterfall priority:
+        # 1. Senior debt service (from balance_schedule)
+        # 2. SHL repayment (after senior debt repaid)
+        # 3. Dividends (after SHL repaid)
+        # For "shl_plus_dividends": use 3-tier waterfall
         sweep_dscr_threshold = 1.35
-        remaining_debt_balance = balance_schedule[period_in_tenor] if period_in_tenor < len(balance_schedule) else 0
+        remaining_senior_balance = balance_schedule[period_in_tenor] if period_in_tenor < len(balance_schedule) else 0
         
-        if lockup:
-            dist = 0
-            sweep_amount = 0.0
-        elif remaining_debt_balance > 0 and dscr > sweep_dscr_threshold:
-            dist, sweep_amount = cash_sweep(
-                cf_after_reserves=cf_after_reserves,
-                senior_debt_balance=remaining_debt_balance,
-                sweep_dscr=sweep_dscr_threshold,
-                actual_dscr=dscr,
-                sweep_pct=1.0,  # 100% sweep
-            )
+        if equity_irr_method == "shl_plus_dividends":
+            # 3-tier waterfall: senior → SHL → dividends
+            if lockup:
+                dist = 0
+                sweep_amount = 0.0
+            elif remaining_senior_balance > 0:
+                # Senior debt still outstanding: sweep to senior first
+                if dscr > sweep_dscr_threshold:
+                    dist, sweep_amount = cash_sweep(
+                        cf_after_reserves=cf_after_reserves,
+                        senior_debt_balance=remaining_senior_balance,
+                        sweep_dscr=sweep_dscr_threshold,
+                        actual_dscr=dscr,
+                        sweep_pct=1.0,
+                    )
+                else:
+                    dist = 0
+                    sweep_amount = 0.0
+            elif shl_balance > 0:
+                # Senior debt repaid, SHL outstanding: all FCF to SHL repayment
+                # SHL principal = min(cf_after_reserves, remaining shl_balance)
+                shl_repayment = max(0, cf_after_reserves)
+                # Update shl_balance will happen in SHL section below
+                dist = 0
+                sweep_amount = 0.0
+            else:
+                # Both senior and SHL repaid: dividends to equity
+                dist = max(0, cf_after_reserves)
+                sweep_amount = 0.0
         else:
-            dist = max(0, cf_after_reserves)
-            sweep_amount = 0.0
+            # Standard 2-tier waterfall: senior → equity distributions
+            if lockup:
+                dist = 0
+                sweep_amount = 0.0
+            elif remaining_senior_balance > 0 and dscr > sweep_dscr_threshold:
+                dist, sweep_amount = cash_sweep(
+                    cf_after_reserves=cf_after_reserves,
+                    senior_debt_balance=remaining_senior_balance,
+                    sweep_dscr=sweep_dscr_threshold,
+                    actual_dscr=dscr,
+                    sweep_pct=1.0,
+                )
+            else:
+                dist = max(0, cf_after_reserves)
+                sweep_amount = 0.0
         
         cum_distribution += dist  # jednom, na kraju svih logika
         
@@ -686,7 +721,7 @@ def run_waterfall(
             cash_sweep_keur=sweep_amount,
             cum_distribution_keur=cum_distribution,
             cash_balance_keur=cash_balance,
-            senior_balance_keur=remaining_debt_balance,  # Closing debt balance after this period
+            senior_balance_keur=remaining_senior_balance,  # Closing debt balance after this period
         )
         
         waterfall_periods.append(wp)
