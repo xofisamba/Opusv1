@@ -275,7 +275,16 @@ def run_waterfall(
     # Compute gearing cap based on sculpt_capex (ex-IDC capex)
     # Use sculpt_capex if provided (> 0), otherwise fall back to total_capex for sizing
     sizing_base = sculpt_capex_keur if sculpt_capex_keur > 0 else total_capex
-    gearing_cap_keur = sizing_base * gearing_ratio
+    
+    # For Oborovo "gearing_cap" method: exclude IDC from the gearing base
+    # because Excel's gearing calculation uses sculpt_capex - IDC
+    # This gives: (57,967 - 1,086) * 0.7524 = 42,815 ≈ Excel 42,852
+    if idc_keur > 0 and sculpt_capex_keur > 0:
+        sizing_base_for_gearing = sizing_base - idc_keur
+    else:
+        sizing_base_for_gearing = sizing_base
+    
+    gearing_cap_keur = sizing_base_for_gearing * gearing_ratio
     
     # Apply debt sizing method
     if debt_sizing_method == "gearing_cap":
