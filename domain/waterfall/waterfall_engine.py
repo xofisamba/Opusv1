@@ -218,6 +218,9 @@ def run_waterfall(
     commitment_fees_keur: float = 0.0,
     opex_schedule: list[float] | None = None,  # Per-period OPEX. If None, inferred from rev-ebitda.
     prior_tax_loss_keur: float = 0.0,  # Initial tax loss carryforward from construction period
+    # Equity IRR method: "equity_only" = capex-debt-SHL (TUHO), "combined" = share_capital+SHL (Oborovo)
+    equity_irr_method: str = "equity_only",
+    share_capital_keur: float = 0.0,  # Only used when equity_irr_method="combined"
 ) -> WaterfallResult:
     """Run full waterfall with iterative debt sculpting.
 
@@ -362,13 +365,19 @@ def run_waterfall(
     op_period_counter = 0  # BUG-3 fix: counter for operation periods (not year_index)
     
     # For returns calculation
-    # equity_investment = equity only (not debt or SHL)
-    # SHL is repaid as bullet at maturity — it reduces equity cash flow but is not equity investment
-    equity_investment = max(0, total_capex - sculpt_result.debt_keur - shl_amount)
+    # Two methods for equity IRR:
+    # "equity_only": equity_investment = capex - debt - SHL, equity_cfs = distributions only (TUHO)
+    # "combined": equity_investment = share_capital + SHL, equity_cfs = SHL service + distributions (Oborovo)
+    if equity_irr_method == "combined":
+        equity_investment = share_capital_keur + shl_amount
+        equity_cfs = [-equity_investment]
+    else:
+        # TUHO style: SHL is repaid as bullet at maturity, reduces equity CF but not equity base
+        equity_investment = max(0, total_capex - sculpt_result.debt_keur - shl_amount)
+        equity_cfs = [-equity_investment]
     # Start with initial investment - dates array now includes financial_close
     # project_cfs: all capital invested (total_capex, including debt)
     project_cfs = [-total_capex]
-    equity_cfs = [-equity_investment]
     
     # Track all periods
     all_dsrs = []
@@ -601,7 +610,9 @@ def run_waterfall(
         # Track CFs for returns
         # Project IRR = unlevered (EBITDA - Tax), equity IRR = levered (distributions)
         project_cfs.append(ebitda - tax_this_period if ebitda else 0)
-        equity_cfs.append(dist)
+        # For "combined" method (Oborovo): include SHL service in equity cash flows
+        equity_cf_for_period = shl_svc + dist if equity_irr_method == "combined" else dist
+        equity_cfs.append(equity_cf_for_period)
     
     # Calculate returns - prepend financial_close date for initial investment
     # This makes dates array match project_cfs/equity_cfs (initial + per-period)

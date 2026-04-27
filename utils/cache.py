@@ -365,6 +365,8 @@ def cached_run_waterfall_v3(
     fixed_debt_keur: float | None = None,  # Override sculpted debt (for P90 sizing)
     fixed_ds_keur: float | None = None,  # Fixed debt service per period (kEUR) — TUHO annuity
     rate_schedule: list[float] | None = None,  # Per-period rate schedule (Euribor curve)
+    equity_irr_method: str = "equity_only",  # "equity_only" | "combined"
+    share_capital_keur: float = 0.0,  # Only used when equity_irr_method="combined"
 ) -> "WaterfallResult":
     """Cached waterfall computation with proper hash_funcs.
 
@@ -455,4 +457,6 @@ def cached_run_waterfall_v3(
         idc_keur=inputs.capex.idc_keur,
         bank_fees_keur=inputs.capex.bank_fees_keur,
         commitment_fees_keur=inputs.capex.commitment_fees_keur,
+        equity_irr_method=equity_irr_method,
+        share_capital_keur=share_capital_keur,
     )

@@ -130,8 +130,8 @@ class TestOpexStructure:
         
         total_y1 = sum(item.y1_amount_keur for item in inputs.opex)
         
-        # Oborovo Excel: opex_y1_keur = 1,353.91
-        expected = 1353.91
+        # Oborovo Excel: opex_y1_keur = 1,339.31 (after period engine fix, 63 periods)
+        expected = 1339.31
         assert abs(total_y1 - expected) / expected < 0.02, \
             f"OPEX Y1 {total_y1} differs from expected {expected} by >2%"
     
