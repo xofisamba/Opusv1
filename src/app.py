@@ -2647,21 +2647,18 @@ def main():
                         st.caption(f"Excel export error: {e}")
     
     with tab_sensitivity:
-        subtab_tornado, subtab_whatif = st.tabs(["🌪️ Tornado Chart", "🔧 What-If Explorer"])
-
-        with subtab_tornado:
-            st.subheader("📉 Sensitivity Analysis — Tornado Chart")
-
-            try:
-                from dataclasses import replace
-
-                # Build base case inputs
-                inputs = _get_inputs_from_session()
-                if inputs is None: return
-                errors = inputs.validate_for_calculation() if hasattr(inputs, "validate_for_calculation") else []
-                if errors:
-                    for e in errors: st.error(e)
-                    st.stop()
+        st.subheader("📉 Sensitivity Analysis — Tornado Chart")
+        
+        try:
+            from dataclasses import replace
+            
+            # Build base case inputs
+            inputs = _get_inputs_from_session()
+            if inputs is None: return
+            errors = inputs.validate_for_calculation() if hasattr(inputs, "validate_for_calculation") else []
+            if errors:
+                for e in errors: st.error(e)
+                st.stop()
             rate = debt_config.senior.all_in_rate / 2
             tenor_periods = debt_config.senior.tenor_years * 2
             base_rate_type = debt_config.senior.base_rate_type
@@ -3103,170 +3100,6 @@ def main():
             import traceback
             st.code(traceback.format_exc())
 
-        with subtab_whatif:
-            st.subheader("🔧 What-If Explorer")
-            st.caption("Promijeni parametre i vidi utjecaj na IRR i DSCR (u realnom vremenu)")
-
-            inputs = st.session_state.get('inputs')
-            if inputs is None:
-                st.info("Učitaj projekt prvo.")
-            else:
-                base_tariff = inputs.revenue.ppa_base_tariff_eur_mwh
-                base_gearing = inputs.financing.gearing_ratio
-                base_yield = inputs.technical.operating_hours_p50
-                base_opex_items = inputs.opex
-                base_margin = 265  # default fallback
-                try:
-                    from app.session import _get_inputs_from_session
-                    debt_cfg = _get_inputs_from_session()
-                    if debt_cfg and hasattr(debt_cfg, 'financing'):
-                        base_margin = debt_cfg.financing.get('senior', {}).get('margin_bps', 265) if isinstance(debt_cfg.financing, dict) else 265
-                except Exception:
-                    pass
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    wi_tariff = st.slider(
-                        "PPA Tariff (EUR/MWh)",
-                        40, 120, int(base_tariff), 1,
-                        key="wi_tariff"
-                    )
-                    wi_capex = st.slider(
-                        "CAPEX delta (%)", -20, +20, 0, 1,
-                        key="wi_capex"
-                    )
-                    wi_yield = st.slider(
-                        "P50 Yield delta (%)", -15, +15, 0, 1,
-                        key="wi_yield"
-                    )
-                with col2:
-                    wi_gearing = st.slider(
-                        "Gearing (%)", 50, 90,
-                        int(base_gearing * 100), 1,
-                        key="wi_gearing"
-                    )
-                    wi_margin = st.slider(
-                        "Debt Margin (bps)", 150, 400,
-                        int(base_margin), 10,
-                        key="wi_margin"
-                    )
-                    wi_opex = st.slider(
-                        "OPEX delta (%)", -20, +30, 0, 1,
-                        key="wi_opex"
-                    )
-
-                if st.button("▶ Izračunaj What-If", key="btn_whatif_run", type="primary"):
-                    with st.spinner("Računam..."):
-                        from dataclasses import replace as dc_replace
-                        from domain.period_engine import PeriodEngine, PeriodFrequency as PF
-
-                        # Build modified inputs
-                        mod_inputs = dc_replace(
-                            inputs,
-                            revenue=dc_replace(
-                                inputs.revenue,
-                                ppa_base_tariff_eur_mwh=wi_tariff,
-                            ),
-                            technical=dc_replace(
-                                inputs.technical,
-                                operating_hours_p50=int(base_yield * (1 + wi_yield / 100)),
-                            ),
-                        )
-                        # CAPEX delta
-                        orig_capex_total = inputs.capex.total_capex
-                        mod_inputs = dc_replace(
-                            mod_inputs,
-                            capex=dc_replace(
-                                mod_inputs.capex,
-                                epc_contract=dc_replace(mod_inputs.capex.epc_contract,
-                                    amount_keur=mod_inputs.capex.epc_contract.amount_keur * (1 + wi_capex / 100)),
-                            ),
-                        )
-                        # Gearing
-                        mod_inputs = dc_replace(
-                            mod_inputs,
-                            financing=dc_replace(
-                                mod_inputs.financing,
-                                gearing_ratio=wi_gearing / 100,
-                            ),
-                        )
-
-                        engine_mod = PeriodEngine(
-                            financial_close=inputs.info.financial_close,
-                            construction_months=inputs.info.construction_months,
-                            horizon_years=inputs.info.horizon_years,
-                            ppa_years=inputs.revenue.ppa_term_years,
-                            frequency=PF.SEMESTRIAL,
-                        )
-                        rate = inputs.financing.all_in_rate / 2
-                        tenor = inputs.financing.senior_tenor_years * 2
-
-                        result_wi = cached_run_waterfall_v3(
-                            inputs=mod_inputs,
-                            engine=engine_mod,
-                            rate_per_period=rate,
-                            tenor_periods=tenor,
-                            target_dscr=inputs.financing.target_dscr,
-                            lockup_dscr=inputs.financing.lockup_dscr,
-                            tax_rate=inputs.tax.corporate_rate,
-                            dsra_months=inputs.financing.dsra_months,
-                            shl_amount=inputs.financing.shl_amount_keur,
-                            shl_rate=inputs.financing.shl_rate,
-                        )
-
-                        # Run base case for comparison
-                        result_base = st.session_state.get('result')
-                        if not result_base:
-                            result_base = cached_run_waterfall_v3(
-                                inputs=inputs,
-                                engine=engine_mod,
-                                rate_per_period=rate,
-                                tenor_periods=tenor,
-                                target_dscr=inputs.financing.target_dscr,
-                                lockup_dscr=inputs.financing.lockup_dscr,
-                                tax_rate=inputs.tax.corporate_rate,
-                                dsra_months=inputs.financing.dsra_months,
-                                shl_amount=inputs.financing.shl_amount_keur,
-                                shl_rate=inputs.financing.shl_rate,
-                            )
-
-                        # Display delta metrics
-                        st.markdown("**Rezultati vs baza**")
-                        c1, c2, c3, c4 = st.columns(4)
-                        c1.metric(
-                            "Project IRR",
-                            f"{result_wi.project_irr:.2%}",
-                            delta=f"{(result_wi.project_irr - result_base.project_irr) * 100:+.2f}pp",
-                        )
-                        c2.metric(
-                            "Equity IRR",
-                            f"{result_wi.equity_irr:.2%}",
-                            delta=f"{(result_wi.equity_irr - result_base.equity_irr) * 100:+.2f}pp",
-                        )
-                        c3.metric(
-                            "Avg DSCR",
-                            f"{result_wi.avg_dscr:.3f}",
-                            delta=f"{result_wi.avg_dscr - result_base.avg_dscr:+.3f}",
-                        )
-                        c4.metric(
-                            "Debt",
-                            f"{result_wi.sculpting_result.debt_keur / 1000:.1f}M",
-                            delta=f"{(result_wi.sculpting_result.debt_keur - result_base.sculpting_result.debt_keur) / 1000:+.1f}M",
-                        )
-
-                        # Mini DSCR bar chart
-                        op_periods = [p for p in result_wi.periods if getattr(p, 'is_operation', False) and getattr(p, 'year_index', 0) > 0]
-                        years = sorted(set(p.year_index for p in op_periods))
-                        dscr_by_year = {}
-                        for y in years:
-                            y_ps = [p for p in op_periods if p.year_index == y]
-                            ebitda = sum(getattr(p, 'ebitda_keur', 0) for p in y_ps)
-                            ds = sum(getattr(p, 'senior_ds_keur', 0) for p in y_ps)
-                            dscr_by_year[y] = ebitda / ds if ds > 0 else 0
-
-                        import pandas as pd
-                        df_d = pd.DataFrame({"DSCR": dscr_by_year})
-                        st.bar_chart(df_d, height=200)
 
     with tab_covenant:
         st.subheader("🏦 Bank Covenant Compliance")
