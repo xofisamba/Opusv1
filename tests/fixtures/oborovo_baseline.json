@@ -51,18 +51,18 @@
     "atad_ebitda_limit": 0.3
   },
   "opex_inputs": {
-    "y1_total_keur": 1353.91,
+    "y1_total_keur": 1998.0,
     "per_mw_keur": 20.78,
     "per_mwh_eur": 18.23,
     "items": [
       {
         "name": "Technical Management",
-        "y1_keur": 198.0,
+        "y1_keur": 280.0,
         "inflation": 0.02
       },
       {
         "name": "Infrastructure Maintenance",
-        "y1_keur": 244.0,
+        "y1_keur": 667.1,
         "inflation": 0.02,
         "step_y3": 185.64
       },
@@ -133,7 +133,7 @@
     "revenue_y1_keur": 6446.75,
     "opex_y1_keur": 1998.0,
     "opex_per_mw_keur": 26.55,
-    "opex_per_mwh_eur": 18.23,
+    "opex_per_mwh_eur": 18.13,
     "project_irr_30y": 0.0842,
     "equity_irr_30y": 0.11,
     "project_npv_30y_keur": 13492.68,

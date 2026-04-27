@@ -76,8 +76,8 @@ class TestOpexCalculation:
         assert "Technical Management" in breakdown
         assert "Insurance" in breakdown
         
-        # Technical Management Y1 = 703.1 kEUR (updated per Sprint 10)
-        assert abs(breakdown["Technical Management"] - 703.1) < 0.01
+        # Technical Management Y1 = 280 kEUR (per Sprint 11 brief)
+        assert abs(breakdown["Technical Management"] - 280.0) < 0.01
     
     def test_opex_step_change(self, inputs):
         """OPEX items with step changes should override escalation."""
