@@ -714,7 +714,7 @@ class ProjectInputs:
         financing = FinancingParams(
             share_capital_keur=500.0,
             share_premium_keur=0.0,
-            shl_amount_keur=11028.67,  # Shareholder Loan from DS sheet
+            shl_amount_keur=29135.0,   # Shareholder Loan from Excel Inputs (39.91% of 72,994 kEUR)
             shl_rate=0.08,
             gearing_ratio=0.594,  # 43,359 / 72,994 = 59.4%
             senior_tenor_years=14,
@@ -734,6 +734,7 @@ class ProjectInputs:
             fixed_ds_keur=2116.0,  # Fixed semi-annual debt service from Excel (DS = 2,116 kEUR)
             debt_sizing_method="fixed",  # TUHO: Excel Macro uses avg DSCR 1.45x target
             fixed_debt_keur=43359.0,  # Excel-verified debt amount (hardcoded from Excel)
+            equity_irr_method="shl_interest_only",  # TUHO: equity CF = SHL interest only (brief Sprint 13)
         )
 
         tax = TaxParams(

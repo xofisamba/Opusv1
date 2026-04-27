@@ -439,8 +439,13 @@ def run_waterfall(
         # Oborovo: equity base = sculpt_capex (ex-IDC) - debt; equity CFs = distributions only
         equity_investment = sculpt_capex_keur - sculpt_result.debt_keur
         equity_cfs = [-equity_investment]
+    elif equity_irr_method == "shl_interest_only":
+        # TUHO style: investor puts in SHL + share capital, receives SHL interest as cash flow
+        # equity_investment = SHL principal + share capital
+        equity_investment = shl_amount + share_capital_keur
+        equity_cfs = [-equity_investment]
     else:
-        # TUHO style: SHL is repaid as bullet at maturity, reduces equity CF but not equity base
+        # TUHO "equity_only" style (legacy): equity base = total_capex - debt - SHL
         equity_investment = max(0, total_capex - sculpt_result.debt_keur - shl_amount)
         equity_cfs = [-equity_investment]
     # Start with initial investment - dates array now includes financial_close
@@ -678,8 +683,15 @@ def run_waterfall(
         # Track CFs for returns
         # Project IRR = unlevered (EBITDA - Tax), equity IRR = levered (distributions)
         project_cfs.append(ebitda - tax_this_period if ebitda else 0)
-        # For "combined" method (Oborovo): include SHL service in equity cash flows
-        equity_cf_for_period = dist  # combined method: distributions only (SHL is treated as separate debt-like instrument)
+        # Equity CF depends on method:
+        if equity_irr_method == "shl_interest_only":
+            # TUHO: equity CF = SHL interest + principal at maturity
+            # The sponsor put in SHL (principal) + share capital at Y0
+            # They receive interest each period, and principal back at maturity
+            equity_cf_for_period = shi + shp  # interest + principal repayment in final period
+        else:
+            # combined/equity_only: equity CF = distributions to equity
+            equity_cf_for_period = dist
         equity_cfs.append(equity_cf_for_period)
     
     # Calculate returns - prepend financial_close date for initial investment
