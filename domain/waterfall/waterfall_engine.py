@@ -362,10 +362,11 @@ def run_waterfall(
     op_period_counter = 0  # BUG-3 fix: counter for operation periods (not year_index)
     
     # For returns calculation
-    # Floor equity at 0 - debt cannot exceed capex, otherwise equity goes negative
-    equity_investment = max(0, total_capex - sculpt_result.debt_keur)
+    # equity_investment = equity only (not debt or SHL)
+    # SHL is repaid as bullet at maturity — it reduces equity cash flow but is not equity investment
+    equity_investment = max(0, total_capex - sculpt_result.debt_keur - shl_amount)
     # Start with initial investment - dates array now includes financial_close
-    # So we prepend [-total_capex] at position 0 to match
+    # project_cfs: all capital invested (total_capex, including debt)
     project_cfs = [-total_capex]
     equity_cfs = [-equity_investment]
     
