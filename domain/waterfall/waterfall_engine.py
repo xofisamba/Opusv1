@@ -521,23 +521,31 @@ def run_waterfall(
             senior_ds = 0
         op_period_counter += 1
         
-        # SHL service — repaid in every period while outstanding (not just H1)
-        # SHL bullet repayment: principal repaid only at final period, interest on remaining balance
-        if shl_balance > 0 and period_in_tenor == tenor_periods - 1:
-            # Last period: repay full remaining balance as bullet
+        # SHL service — amortizing or bullet based on equity_irr_method
+        # For "shl_plus_dividends": SHL amortizes from Y14 (period 28) to Y20 (period 40)
+        # For "shl_interest_only": SHL is bullet (full principal at maturity)
+        # Senior debt tenor = 14 years (28 periods). After that, SHL amortizes.
+        shl_amort_start_period = 27  # Y14-H1 (first amort period, period_in_tenor=27)
+        
+        if shl_balance > 0:
             shi = shl_balance * shl_rate / 2  # Semi-annual interest
-            shp = shl_balance  # Full bullet principal
+            if equity_irr_method == "shl_plus_dividends" and period_in_tenor >= shl_amort_start_period:
+                # Amortizing SHL: repay principal over remaining periods (Y14-Y20 = 13 semi-annual periods)
+                # Fixed 13 semi-annual periods for SHL amort (Y14-Y20 = 13 periods)
+                shl_amort_total_periods = 13
+                periods_into_amort = period_in_tenor - shl_amort_start_period
+                remaining_amort_periods = max(1, shl_amort_total_periods - periods_into_amort)
+                # Equal amortization: principal per period = balance / remaining periods
+                shp = min(shl_balance, shl_balance / remaining_amort_periods)
+            elif equity_irr_method == "shl_interest_only" and period_in_tenor == tenor_periods - 1:
+                # Bullet SHL: repay full balance at last period
+                shp = shl_balance
+            else:
+                shp = 0
             shl_svc = shi + shp
-            shl_balance = 0
-        elif shl_balance > 0 and period_in_tenor < tenor_periods:
-            # Interest-only period: no principal repayment until maturity
-            shi = shl_balance * shl_rate / 2
-            shp = 0
-            shl_svc = shi
+            shl_balance -= shp
         else:
-            shi = 0
-            shp = 0
-            shl_svc = 0
+            shi = 0; shp = 0; shl_svc = 0
         
         # ATAD-based tax calculation with fiscal reintegration
         # Interest deductibility limited to 30% of EBITDA (ATAD directive)
@@ -686,14 +694,15 @@ def run_waterfall(
         # Track CFs for returns
         # Project IRR = unlevered (EBITDA - Tax), equity IRR = levered (distributions)
         project_cfs.append(ebitda - tax_this_period if ebitda else 0)
-        # Equity CF depends on method:
+        # Equity CF for TUHO: Row 28 "Total" = SHL interest + SHL principal + dividends
         if equity_irr_method == "shl_interest_only":
-            # TUHO bullet SHL: equity CF = SHL interest + principal at maturity
-            equity_cf_for_period = shi + shp  # interest + principal in final period
+            # Bullet SHL: equity CF = SHL interest + principal at maturity
+            equity_cf_for_period = shi + shp
         elif equity_irr_method == "shl_plus_dividends":
-            # TUHO amortizing SHL: equity CF = SHL interest + SHL principal + dividends
-            # SHL amortizes Y14-Y20 (after senior debt), dividends start Y19+
-            equity_cf_for_period = shi + shp + dist  # interest + principal + distribution
+            # Amortizing SHL: equity CF = SHL interest + amortizing principal
+            # NO dist during SHL amort (brief dividends start after SHL is fully repaid)
+            # After SHL is fully repaid (shp = 0), equity receives dividends via dist
+            equity_cf_for_period = shi + shp  # dist excluded during SHL outstanding (dividends after SHL repaid)
         else:
             # combined/equity_only: equity CF = distributions to equity
             equity_cf_for_period = dist

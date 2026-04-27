@@ -1,22 +1,19 @@
 {
-  "_comment": "Current model outputs (v7-sprint10 after Oborovo OpEx calibration). Source: ProjectInputs.create_default_oborovo() + cached_run_waterfall_v3. NOT Excel-verified — model calibration in progress.",
-
+  "_comment": "Current model outputs (v7-sprint10 after Oborovo OpEx calibration). Source: ProjectInputs.create_default_oborovo() + cached_run_waterfall_v3. NOT Excel-verified \u2014 model calibration in progress.",
   "metadata": {
     "version": "v7-sprint10",
     "generated": "2026-04-27",
     "model": "oborovo_model v7",
     "note": "Updated after Sprint 10 Task 10-0: Oborovo OpEx calibrated from 1,339 to 1,998 kEUR per Excel CF sheet. This fixed Y1 OpEx but moved equity_irr from 10.79% to 10.06% and project_irr from 8.62% to 7.44%."
   },
-
   "note": "This fixture captures the CURRENT state of the model. Excel-verified targets are in oborovo_golden.json. Calibration still in progress.",
-
   "current_outputs": {
     "total_revenue_keur": 266983,
     "total_opex_keur": 79646,
     "total_ebitda_keur": 188319,
     "total_tax_keur": 15481,
     "total_senior_ds_keur": 63725,
-    "total_distribution_keur": 118314,
+    "total_distribution_keur": 103046,
     "debt_keur": 43614,
     "project_irr": 0.07437,
     "equity_irr": 0.10057,
@@ -27,30 +24,27 @@
     "min_llcr": 1.0458,
     "min_plcr": 1.8765
   },
-
   "excel_targets": {
     "note": "Excel-verified golden numbers from oborovo_golden.json.",
     "total_debt_keur": 42852.279,
     "project_irr": 0.0796,
     "equity_irr": 0.106,
     "avg_dscr": 1.147,
-    "min_dscr": 1.10,
+    "min_dscr": 1.1,
     "senior_ds_y1_keur": 4441.8
   },
-
   "deviations": {
     "debt_pct": 1.78,
     "project_irr_bps": -52.5,
     "equity_irr_bps": -54.3,
     "avg_dscr_abs": -0.324,
-    "summary": "Sprint 10 Task 10-0: Oborovo OpEx fixed (1,339 → 1,998 kEUR). Project IRR moved from +0.66pp to -0.52pp (now below target). Equity IRR moved from +0.19pp to -0.54pp (now below target). Debt unchanged at 43,614 kEUR. TUHO revenue calibration still needed (Task 10-1)."
+    "summary": "Sprint 10 Task 10-0: Oborovo OpEx fixed (1,339 \u2192 1,998 kEUR). Project IRR moved from +0.66pp to -0.52pp (now below target). Equity IRR moved from +0.19pp to -0.54pp (now below target). Debt unchanged at 43,614 kEUR. TUHO revenue calibration still needed (Task 10-1)."
   },
-
   "tolerances": {
     "project_irr_pct": 15.0,
     "equity_irr_pct": 15.0,
     "npv_pct": 15.0,
     "debt_pct": 15.0,
-    "dscr_abs": 0.30
+    "dscr_abs": 0.3
   }
 }
