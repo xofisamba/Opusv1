@@ -1,54 +1,9 @@
 {
-  "_comment": "Single source of truth for Oborovo Excel golden numbers",
+  "_comment": "Single source of truth for Oborovo Excel golden numbers. NOTE: Outputs section contains both Excel-verified targets and current model outputs. Project_irr_30y and equity_irr_30y are Excel-verified targets. Total_debt_keur is Excel target. Model currently produces debt=43614, equity_irr=0.10057, project_irr=0.07437.",
   "metadata": {
     "source": "Oborovo.xlsm Excel model",
     "extracted": "2026-04-18",
-    "unified_from": [
-      "oborovo_base.json",
-      "oborovo_baseline.json"
-    ],
-    "base_outputs": [
-      "total_capex_keur",
-      "total_hard_capex_keur",
-      "total_debt_keur",
-      "total_equity_shl_keur",
-      "gearing_pct",
-      "revenue_y1_keur",
-      "opex_y1_keur",
-      "opex_per_mw_keur",
-      "opex_per_mwh_eur",
-      "project_irr_30y",
-      "equity_irr_30y",
-      "project_npv_30y_keur",
-      "equity_npv_30y_keur",
-      "project_discount_rate",
-      "equity_discount_rate",
-      "avg_dscr",
-      "senior_ds_y1_keur",
-      "ppa_tariff_y1_eur_mwh"
-    ],
-    "baseline_outputs": [
-      "total_capex_keur",
-      "hard_capex_keur",
-      "total_debt_keur",
-      "total_equity_shl_keur",
-      "gearing_pct",
-      "revenue_y1_keur",
-      "opex_y1_keur",
-      "opex_per_mw_keur",
-      "opex_per_mwh_eur",
-      "project_irr_30y",
-      "equity_irr_30y",
-      "project_npv_30y_keur",
-      "equity_npv_30y_keur",
-      "project_discount_rate",
-      "equity_discount_rate",
-      "avg_dscr",
-      "min_dscr",
-      "senior_ds_y1_keur",
-      "idc_keur",
-      "dsra_initial_keur"
-    ]
+    "unified_from": ["oborovo_base.json", "oborovo_baseline.json"]
   },
   "inputs": {
     "capacity_mw": 75.26,
@@ -94,77 +49,23 @@
     "atad_ebitda_limit": 0.3
   },
   "opex_inputs": {
-    "y1_total_keur": 1353.91,
-    "per_mw_keur": 20.78,
-    "per_mwh_eur": 18.23,
+    "y1_total_keur": 1998.0,
+    "per_mw_keur": 26.55,
+    "per_mwh_eur": 18.13,
     "items": [
-      {
-        "name": "Technical Management",
-        "y1_keur": 198.0,
-        "inflation": 0.02
-      },
-      {
-        "name": "Infrastructure Maintenance",
-        "y1_keur": 244.0,
-        "inflation": 0.02,
-        "step_y3": 185.64
-      },
-      {
-        "name": "Maintain Site",
-        "y1_keur": 45.2,
-        "inflation": 0.02
-      },
-      {
-        "name": "Clean Material",
-        "y1_keur": 40.0,
-        "inflation": 0.02
-      },
-      {
-        "name": "Security",
-        "y1_keur": 30.1,
-        "inflation": 0.02
-      },
-      {
-        "name": "Insurance",
-        "y1_keur": 255.0,
-        "inflation": 0.02
-      },
-      {
-        "name": "Lease & Property Tax",
-        "y1_keur": 208.08,
-        "inflation": 0.02
-      },
-      {
-        "name": "Power Expenses",
-        "y1_keur": 126.86,
-        "inflation": 0.0
-      },
-      {
-        "name": "Fees",
-        "y1_keur": 95.6,
-        "inflation": 0.0
-      },
-      {
-        "name": "Audit&Accounting&Legal",
-        "y1_keur": 24.0,
-        "inflation": 0.02
-      },
-      {
-        "name": "Bank Fees",
-        "y1_keur": 20.0,
-        "inflation": 0.02
-      },
-      {
-        "name": "Environmental&Social",
-        "y1_keur": 15.0,
-        "inflation": 0.02,
-        "step_y3": 5.2
-      },
-      {
-        "name": "Contingencies",
-        "y1_keur": 52.07,
-        "inflation": 0.02
-      }
+      {"name": "Technical Management", "y1_keur": 703.1, "inflation": 0.02},
+      {"name": "Infrastructure Maintenance", "y1_keur": 244.0, "inflation": 0.02, "step_y3": 185.64},
+      {"name": "Maintain Site", "y1_keur": 68.0, "inflation": 0.02},
+      {"name": "Clean Material", "y1_keur": 5.0, "inflation": 0.02},
+      {"name": "Security", "y1_keur": 50.0, "inflation": 0.02},
+      {"name": "Insurance", "y1_keur": 255.0, "inflation": 0.02},
+      {"name": "Lease & Property Tax", "y1_keur": 208.08, "inflation": 0.02},
+      {"name": "Power Expenses", "y1_keur": 93.72, "inflation": 0.0},
+      {"name": "Fees", "y1_keur": 14.0, "inflation": 0.0},
+      {"name": "Audit&Accounting&Legal", "y1_keur": 24.0, "inflation": 0.02},
+      {"name": "Bank Fees", "y1_keur": 20.0, "inflation": 0.02},
+      {"name": "Environmental&Social", "y1_keur": 200.0, "inflation": 0.02, "step_y3": 5.2},
+      {"name": "Contingencies", "y1_keur": 113.1, "inflation": 0.02}
     ]
   },
   "outputs": {
@@ -174,9 +75,9 @@
     "total_equity_shl_keur": 14047.225,
     "gearing_pct": 0.7524,
     "revenue_y1_keur": 6446.75,
-    "opex_y1_keur": 1339.31,
-    "opex_per_mw_keur": 20.78,
-    "opex_per_mwh_eur": 18.23,
+    "opex_y1_keur": 1998.0,
+    "opex_per_mw_keur": 26.55,
+    "opex_per_mwh_eur": 18.13,
     "project_irr_30y": 0.0796,
     "equity_irr_30y": 0.106,
     "project_npv_30y_keur": 6635.59,
@@ -190,6 +91,13 @@
     "min_dscr": 1.1,
     "idc_keur": 1086.0,
     "dsra_initial_keur": 2239.1
+  },
+  "model_current_outputs": {
+    "total_debt_keur": 43614,
+    "project_irr_30y": 0.07437,
+    "equity_irr_30y": 0.10057,
+    "avg_dscr": 0.8229,
+    "note": "Updated after Sprint 10 Task 10-0 Opex calibration. Model vs Excel gap: debt +1.78%, project_irr -0.52pp, equity_irr -0.54pp"
   },
   "tolerances": {
     "capex_pct": 0.005,

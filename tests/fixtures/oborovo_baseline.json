@@ -1,6 +1,5 @@
 {
   "_comment": "Oborovo baseline fixture - Excel verified golden numbers. Source: 20260414_BP_Oborovo_Sensitivity_FINAL_for_PPT.xlsm",
-  
   "metadata": {
     "version": "1.0",
     "extracted": "2026-04-18",
@@ -8,7 +7,6 @@
     "sheet": "Outputs",
     "note": "All outputs Excel-verified. Inputs from Inputs sheet."
   },
-
   "inputs": {
     "capacity_mw": 75.26,
     "ppa_term_years": 12,
@@ -27,11 +25,10 @@
     "cod_date": "2030-06-29",
     "gearing_ratio": 0.7524
   },
-
   "financing_inputs": {
     "senior_tenor_years": 14,
     "target_dscr": 1.15,
-    "lockup_dscr": 1.10,
+    "lockup_dscr": 1.1,
     "base_rate": 0.03,
     "margin_bps": 265,
     "floating_share": 0.2,
@@ -44,38 +41,89 @@
     "share_capital_keur": 500.0,
     "dsra_months": 6
   },
-
   "tax_inputs": {
-    "corporate_rate": 0.10,
+    "corporate_rate": 0.1,
     "loss_carryforward_years": 5,
     "loss_carryforward_cap": 1.0,
-    "legal_reserve_cap": 0.10,
+    "legal_reserve_cap": 0.1,
     "wht_sponsor_dividends": 0.05,
     "thin_cap_enabled": false,
-    "atad_ebitda_limit": 0.30
+    "atad_ebitda_limit": 0.3
   },
-
   "opex_inputs": {
     "y1_total_keur": 1353.91,
     "per_mw_keur": 20.78,
     "per_mwh_eur": 18.23,
     "items": [
-      {"name": "Technical Management", "y1_keur": 198.0, "inflation": 0.02},
-      {"name": "Infrastructure Maintenance", "y1_keur": 244.0, "inflation": 0.02, "step_y3": 185.64},
-      {"name": "Maintain Site", "y1_keur": 45.2, "inflation": 0.02},
-      {"name": "Clean Material", "y1_keur": 40.0, "inflation": 0.02},
-      {"name": "Security", "y1_keur": 30.1, "inflation": 0.02},
-      {"name": "Insurance", "y1_keur": 255.0, "inflation": 0.02},
-      {"name": "Lease & Property Tax", "y1_keur": 208.08, "inflation": 0.02},
-      {"name": "Power Expenses", "y1_keur": 126.86, "inflation": 0.0},
-      {"name": "Fees", "y1_keur": 95.6, "inflation": 0.0},
-      {"name": "Audit&Accounting&Legal", "y1_keur": 24.0, "inflation": 0.02},
-      {"name": "Bank Fees", "y1_keur": 20.0, "inflation": 0.02},
-      {"name": "Environmental&Social", "y1_keur": 15.0, "inflation": 0.02, "step_y3": 5.2},
-      {"name": "Contingencies", "y1_keur": 52.07, "inflation": 0.02}
+      {
+        "name": "Technical Management",
+        "y1_keur": 198.0,
+        "inflation": 0.02
+      },
+      {
+        "name": "Infrastructure Maintenance",
+        "y1_keur": 244.0,
+        "inflation": 0.02,
+        "step_y3": 185.64
+      },
+      {
+        "name": "Maintain Site",
+        "y1_keur": 45.2,
+        "inflation": 0.02
+      },
+      {
+        "name": "Clean Material",
+        "y1_keur": 40.0,
+        "inflation": 0.02
+      },
+      {
+        "name": "Security",
+        "y1_keur": 30.1,
+        "inflation": 0.02
+      },
+      {
+        "name": "Insurance",
+        "y1_keur": 255.0,
+        "inflation": 0.02
+      },
+      {
+        "name": "Lease & Property Tax",
+        "y1_keur": 208.08,
+        "inflation": 0.02
+      },
+      {
+        "name": "Power Expenses",
+        "y1_keur": 126.86,
+        "inflation": 0.0
+      },
+      {
+        "name": "Fees",
+        "y1_keur": 95.6,
+        "inflation": 0.0
+      },
+      {
+        "name": "Audit&Accounting&Legal",
+        "y1_keur": 24.0,
+        "inflation": 0.02
+      },
+      {
+        "name": "Bank Fees",
+        "y1_keur": 20.0,
+        "inflation": 0.02
+      },
+      {
+        "name": "Environmental&Social",
+        "y1_keur": 15.0,
+        "inflation": 0.02,
+        "step_y3": 5.2
+      },
+      {
+        "name": "Contingencies",
+        "y1_keur": 52.07,
+        "inflation": 0.02
+      }
     ]
   },
-
   "outputs": {
     "total_capex_keur": 56899.504,
     "hard_capex_keur": 54931.474,
@@ -83,31 +131,29 @@
     "total_equity_shl_keur": 14047.225,
     "gearing_pct": 0.7524,
     "revenue_y1_keur": 6446.75,
-    "opex_y1_keur": 1353.91,
-    "opex_per_mw_keur": 20.78,
+    "opex_y1_keur": 1998.0,
+    "opex_per_mw_keur": 26.55,
     "opex_per_mwh_eur": 18.23,
     "project_irr_30y": 0.0842,
-    "equity_irr_30y": 0.1100,
+    "equity_irr_30y": 0.11,
     "project_npv_30y_keur": 13492.68,
     "equity_npv_30y_keur": 3197.13,
     "project_discount_rate": 0.0641,
     "equity_discount_rate": 0.0965,
     "avg_dscr": 1.147,
-    "min_dscr": 1.10,
+    "min_dscr": 1.1,
     "senior_ds_y1_keur": 4441.8,
     "idc_keur": 1086.0,
     "dsra_initial_keur": 2239.1
   },
-
   "tolerances": {
-    "capex_pct": 0.10,
-    "revenue_pct": 0.10,
+    "capex_pct": 0.1,
+    "revenue_pct": 0.1,
     "opex_pct": 0.02,
     "irr_bps": 1,
     "npv_pct": 0.05,
     "dscr_abs": 0.002
   },
-
   "discount_rates": {
     "project_hurdle": 0.0641,
     "equity_hurdle": 0.0965

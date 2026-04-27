@@ -24,9 +24,9 @@ class TestOpexCalculation:
         return ProjectInputs.create_default_oborovo()
     
     def test_opex_y1_total(self, inputs):
-        """OPEX Y1 should be ~1,353.91 kEUR."""
+        """OPEX Y1 should be ~1,998 kEUR per Excel CF sheet."""
         opex = opex_year(inputs.opex, 1)
-        expected = 1353.91
+        expected = 1998.0
         assert abs(opex - expected) / expected < 0.02  # Within 2%
     
     def test_opex_items_count(self, inputs):
@@ -55,12 +55,9 @@ class TestOpexCalculation:
         assert y5 / y1 > 1.05  # More than 5% increase in 4 years
     
     def test_opex_per_mw(self, inputs):
-        """OPEX per MW should be ~20 kEUR/MW."""
+        """OPEX per MW should be ~26 kEUR/MW (1,998 / 75.26)."""
         per_mw = opex_per_mw_y1(inputs)
-        
-        # Expected ~20.78 kEUR/MW
-        expected = 1353.91 / 75.26  # ~18 kEUR/MW from our items
-        assert 15 < per_mw < 25  # Reasonable range
+        assert 24 < per_mw < 30  # ~26.55 kEUR/MW range
     
     def test_opex_per_mwh(self, inputs):
         """OPEX per MWh should be ~18 EUR/MWh."""
@@ -79,8 +76,8 @@ class TestOpexCalculation:
         assert "Technical Management" in breakdown
         assert "Insurance" in breakdown
         
-        # Technical Management Y1 = 198 kEUR
-        assert abs(breakdown["Technical Management"] - 198.0) < 0.01
+        # Technical Management Y1 = 703.1 kEUR (updated per Sprint 10)
+        assert abs(breakdown["Technical Management"] - 703.1) < 0.01
     
     def test_opex_step_change(self, inputs):
         """OPEX items with step changes should override escalation."""

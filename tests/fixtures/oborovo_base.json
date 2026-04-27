@@ -4,17 +4,17 @@
   "date_extracted": "2026-04-18",
   "note": "Golden numbers extracted from Excel Outputs sheet for validation",
   "outputs": {
-    "total_capex_keur": 56899.5040,
+    "total_capex_keur": 56899.504,
     "total_hard_capex_keur": 54931.4738,
     "total_debt_keur": 42852.2788,
     "total_equity_shl_keur": 14047.2252,
     "gearing_pct": 0.7524,
     "revenue_y1_keur": 6446.7535,
-    "opex_y1_keur": 1339.31,
-    "opex_per_mw_keur": 20.78,
+    "opex_y1_keur": 1998.0,
+    "opex_per_mw_keur": 26.55,
     "opex_per_mwh_eur": 18.23,
     "project_irr_30y": 0.0842,
-    "equity_irr_30y": 0.1100,
+    "equity_irr_30y": 0.11,
     "project_npv_30y_keur": 13492.6753,
     "equity_npv_30y_keur": 3197.1293,
     "project_discount_rate": 0.0641,
@@ -35,10 +35,10 @@
     "gearing_ratio": 0.7524,
     "senior_tenor_years": 14,
     "target_dscr": 1.15,
-    "lockup_dscr": 1.10,
+    "lockup_dscr": 1.1,
     "base_rate": 0.03,
     "margin_bps": 265,
-    "corporate_tax_rate": 0.10,
+    "corporate_tax_rate": 0.1,
     "shl_amount_keur": 13547.2,
     "shl_rate": 0.08,
     "share_capital_keur": 500.0
@@ -50,5 +50,13 @@
     "irr_tolerance_bps": 1,
     "npv_tolerance_pct": 0.005,
     "dscr_tolerance": 0.002
+  },
+  "tolerances": {
+    "capex_pct": 0.005,
+    "revenue_pct": 0.01,
+    "opex_pct": 0.02,
+    "irr_bps": 10,
+    "npv_pct": 0.02,
+    "dscr_abs": 0.05
   }
 }

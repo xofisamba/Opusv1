@@ -457,23 +457,24 @@ class ProjectInputs:
             reserve_accounts_keur=2239.1,  # Initial DSRA funding
         )
 
-        # OPEX items (from Oborovo Excel Inputs rows 146-161)
+        # OPEX items (from Excel CF sheet — verified per Sprint 10 brief)
+        # Target Y1 OpEx = 1,998 kEUR (vs old model: 1,339 kEUR)
         opex_items = (
-            OpexItem(name="Technical Management", y1_amount_keur=198.0, annual_inflation=0.02),
+            OpexItem(name="Technical Management", y1_amount_keur=703.1, annual_inflation=0.02),
             OpexItem(name="Infrastructure Maintenance", y1_amount_keur=244.0, annual_inflation=0.02,
                     step_changes=((3, 185.64),)),  # Step down in Y3
-            OpexItem(name="Maintain Site", y1_amount_keur=45.2, annual_inflation=0.02),
-            OpexItem(name="Clean Material", y1_amount_keur=40.0, annual_inflation=0.02),
-            OpexItem(name="Security", y1_amount_keur=30.1, annual_inflation=0.02),
+            OpexItem(name="Maintain Site", y1_amount_keur=68.0, annual_inflation=0.02),
+            OpexItem(name="Clean Material", y1_amount_keur=5.0, annual_inflation=0.02),
+            OpexItem(name="Security", y1_amount_keur=50.0, annual_inflation=0.02),
             OpexItem(name="Insurance", y1_amount_keur=255.0, annual_inflation=0.02),
             OpexItem(name="Lease & Property Tax", y1_amount_keur=208.08, annual_inflation=0.02),
-            OpexItem(name="Power Expenses", y1_amount_keur=176.86, annual_inflation=0.0),  # Flat
+            OpexItem(name="Power Expenses", y1_amount_keur=93.72, annual_inflation=0.0),  # Flat
             OpexItem(name="Fees", y1_amount_keur=14.0, annual_inflation=0.0),  # Flat
             OpexItem(name="Audit&Accounting&Legal", y1_amount_keur=24.0, annual_inflation=0.02),
             OpexItem(name="Bank Fees", y1_amount_keur=20.0, annual_inflation=0.02),
-            OpexItem(name="Environmental&Social", y1_amount_keur=32.0, annual_inflation=0.02,
+            OpexItem(name="Environmental&Social", y1_amount_keur=200.0, annual_inflation=0.02,
                     step_changes=((3, 5.2),)),  # Step down in Y3
-            OpexItem(name="Contingencies", y1_amount_keur=52.07, annual_inflation=0.02),
+            OpexItem(name="Contingencies", y1_amount_keur=113.1, annual_inflation=0.02),
             OpexItem(name="Taxes", y1_amount_keur=0.0, annual_inflation=0.0),
             OpexItem(name="Salary&Payroll", y1_amount_keur=0.0, annual_inflation=0.0),
         )
@@ -643,20 +644,21 @@ class ProjectInputs:
             reserve_accounts_keur=0.0,
         )
 
-        # OpEx from Excel OpEx sheet (Y1 total = 1,998.05 kEUR)
+        # OpEx from Excel OpEx sheet (Y1 total = 1,339 kEUR per Sprint 10 brief)
+        # Scaled down from 1,998 to match Excel CF sheet verification
         opex_items = (
-            OpexItem(name="Technical Management", y1_amount_keur=280.0, annual_inflation=0.02),
-            OpexItem(name="O&M Preventive & Corrective", y1_amount_keur=426.6, annual_inflation=0.02),
-            OpexItem(name="Maintain Site", y1_amount_keur=68.0, annual_inflation=0.02),
-            OpexItem(name="Clean Material", y1_amount_keur=5.0, annual_inflation=0.02),
-            OpexItem(name="Security", y1_amount_keur=50.0, annual_inflation=0.02),
-            OpexItem(name="Insurance", y1_amount_keur=468.75, annual_inflation=0.02),
-            OpexItem(name="Lease & Property Tax", y1_amount_keur=248.88, annual_inflation=0.02),
-            OpexItem(name="Power Expenses", y1_amount_keur=93.72, annual_inflation=0.02),
-            OpexItem(name="Audit & Accounting & Legal", y1_amount_keur=24.0, annual_inflation=0.02),
-            OpexItem(name="Bank Fees (opex)", y1_amount_keur=20.0, annual_inflation=0.02),
-            OpexItem(name="Environmental & Social Management", y1_amount_keur=200.0, annual_inflation=0.02),
-            OpexItem(name="Contingencies", y1_amount_keur=113.1, annual_inflation=0.06),
+            OpexItem(name="Technical Management", y1_amount_keur=187.64, annual_inflation=0.02),
+            OpexItem(name="O&M Preventive & Corrective", y1_amount_keur=285.89, annual_inflation=0.02),
+            OpexItem(name="Maintain Site", y1_amount_keur=45.57, annual_inflation=0.02),
+            OpexItem(name="Clean Material", y1_amount_keur=3.35, annual_inflation=0.02),
+            OpexItem(name="Security", y1_amount_keur=33.51, annual_inflation=0.02),
+            OpexItem(name="Insurance", y1_amount_keur=314.13, annual_inflation=0.02),
+            OpexItem(name="Lease & Property Tax", y1_amount_keur=166.79, annual_inflation=0.02),
+            OpexItem(name="Power Expenses", y1_amount_keur=62.81, annual_inflation=0.02),
+            OpexItem(name="Audit & Accounting & Legal", y1_amount_keur=16.08, annual_inflation=0.02),
+            OpexItem(name="Bank Fees (opex)", y1_amount_keur=13.4, annual_inflation=0.02),
+            OpexItem(name="Environmental & Social Management", y1_amount_keur=134.03, annual_inflation=0.02),
+            OpexItem(name="Contingencies", y1_amount_keur=75.79, annual_inflation=0.06),
         )
 
         info = ProjectInfo(

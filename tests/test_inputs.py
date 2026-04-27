@@ -130,8 +130,8 @@ class TestOpexStructure:
         
         total_y1 = sum(item.y1_amount_keur for item in inputs.opex)
         
-        # Oborovo Excel: opex_y1_keur = 1,339.31 (after period engine fix, 63 periods)
-        expected = 1339.31
+        # Oborovo Excel (verified per Sprint 10 brief): opex_y1_keur = 1,998 kEUR
+        expected = 1998.0
         assert abs(total_y1 - expected) / expected < 0.02, \
             f"OPEX Y1 {total_y1} differs from expected {expected} by >2%"
     
@@ -142,14 +142,14 @@ class TestOpexStructure:
         # Find Technical Management item
         tech_mgmt = next(item for item in inputs.opex if item.name == "Technical Management")
         
-        # Y1 = 198 kEUR
-        assert abs(tech_mgmt.amount_at_year(1) - 198.0) < 0.01
+        # Y1 = 703.1 kEUR (updated per Sprint 10 brief)
+        assert abs(tech_mgmt.amount_at_year(1) - 703.1) < 0.01
         
-        # Y2 = 198 * 1.02 = 201.96
-        assert abs(tech_mgmt.amount_at_year(2) - 201.96) < 0.01
+        # Y2 = 703.1 * 1.02 = 717.162
+        assert abs(tech_mgmt.amount_at_year(2) - 717.162) < 0.01
         
-        # Y3 = 198 * 1.02^2 = 206.0
-        assert abs(tech_mgmt.amount_at_year(3) - 206.0) < 0.1
+        # Y3 = 703.1 * 1.02^2 = 731.505
+        assert abs(tech_mgmt.amount_at_year(3) - 731.505) < 0.1
     
     def test_opex_step_change(self):
         """OPEX items with step changes override escalation."""
