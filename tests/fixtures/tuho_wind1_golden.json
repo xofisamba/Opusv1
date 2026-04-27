@@ -25,7 +25,7 @@
     "equity_irr_p90": 0.0781,
     "equity_irr_10y": -0.0507,
     "project_npv_30y_keur": 17500.83,
-    "avg_dscr": 1.20,
+    "avg_dscr": 1.3713,
     "gearing_pct": 0.594
   },
   "tolerances": {
