@@ -317,6 +317,7 @@ class FinancingParams:
     # "gearing_cap" → debt = max(DSCR-constrained, gearing_cap) — gearing wins (Oborovo style)
     # "fixed" → debt = fixed_debt_keur (override)
     debt_sizing_method: str = "dscr_sculpt"
+    fixed_debt_keur: float | None = None  # Override sculpted debt with fixed amount
 
     @property
     def all_in_rate(self) -> float:
@@ -731,6 +732,8 @@ class ProjectInputs:
             dsra_months=6,
             amortization_type="fixed_ds",  # TUHO uses fixed DS (annuity-like), not sculpted
             fixed_ds_keur=2116.0,  # Fixed semi-annual debt service from Excel (DS = 2,116 kEUR)
+            debt_sizing_method="fixed",  # TUHO: Excel Macro uses avg DSCR 1.45x target
+            fixed_debt_keur=43359.0,  # Excel-verified debt amount (hardcoded from Excel)
         )
 
         tax = TaxParams(
