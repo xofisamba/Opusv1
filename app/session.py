@@ -356,7 +356,7 @@ def init_session_state() -> None:
         ]
         for name, tech_type, inputs, desc in defaults:
             if name not in existing:
-                proj = repo.create_project(name, tech_type=tech_type, description=desc)
+                proj = repo.create_project(name, technology_type=tech_type, description=desc)
                 base = proj.scenarios[0]
                 inputs_dict = _convert_inputs_to_nested(inputs)
                 repo.save_inputs(base.id, inputs_dict)
