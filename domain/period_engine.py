@@ -201,15 +201,23 @@ class PeriodEngine:
         THRESHOLD_DAYS = 7
         current_date = self._cod
         
-        # Determine first period end based on COD proximity to June 30
-        jun_30 = date(current_date.year, 6, 30)
+        # Determine first period end based on COD proximity to June 30.
+        # Use the NEXT June 30 after COD (not COD year June 30).
+        # If COD is Jul-Dec, next June 30 is in the following year.
+        # This correctly handles TUHO COD Dec 30, 2029 → anchor = Jun 30, 2030.
+        if current_date.month <= 6:
+            jun_30 = date(current_date.year, 6, 30)
+        else:
+            jun_30 = date(current_date.year + 1, 6, 30)
         days_to_jun_30 = (jun_30 - current_date).days
         
-        # Short first period (1 day COD→Dec31) only if COD is within [jun_30-7days, jun_30]
-        # i.e., 0 <= days_to_jun_30 < 7: COD is at end of June / beginning of July
-        # For TUHO (COD Dec 30): days_to_jun_30 = -183 → uses normal path ✓
-        # For Oborovo (COD June 29): days_to_jun_30 = 1 → uses short path ✓
-        if 0 <= days_to_jun_30 < THRESHOLD_DAYS:
+        # Short first period (1 day stub) only if:
+        # - days_to_jun_30 in [0, 7) AND
+        # - COD is not in June (month != 6)
+        # June COD always uses normal path (first op end = Jun 30).
+        # This fixes Oborovo (COD Jun 29, 2030): goes to normal path → first op end = Jun 30 ✓
+        # TUHO (COD Dec 30, 2029): days=182 ≥ 7 → normal path ✓
+        if 0 <= days_to_jun_30 < THRESHOLD_DAYS and current_date.month != 6:
             # COD near June 30 — first period = COD to Dec 31 (H2 by calendar)
             p1_end = date(current_date.year, 12, 31)
             p2_end = date(current_date.year + 1, 6, 30)

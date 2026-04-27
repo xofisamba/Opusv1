@@ -307,6 +307,11 @@ class FinancingParams:
     # Reserve accounts
     dsra_months: int = 6               # Inputs!D348 - DSRA funding months (6)
 
+    # Equity IRR calculation method:
+    # "equity_only" → IRR base = capex - debt - SHL (TUHO style)
+    # "combined" → IRR base = share_capital + SHL, cash flows include SHL interest + principal (Oborovo style)
+    equity_irr_method: str = "equity_only"
+
     @property
     def all_in_rate(self) -> float:
         """All-in interest rate (base + margin)."""
@@ -518,9 +523,9 @@ class ProjectInputs:
             share_premium_keur=0.0,
             shl_amount_keur=13547.2,
             shl_rate=0.08,
-            gearing_ratio=0.7392,
+            gearing_ratio=0.7524,  # Excel: 75.24%
             senior_tenor_years=14,
-            base_rate=0.03188,
+            base_rate=0.03,  # Excel: 3.0%
             margin_bps=265,
             floating_share=0.2,
             fixed_share=0.8,
@@ -532,6 +537,7 @@ class ProjectInputs:
             lockup_dscr=1.10,
             min_llcr=1.15,
             dsra_months=6,
+            equity_irr_method="combined",  # Oborovo uses combined SHL+equity method
         )
 
         tax = TaxParams(
