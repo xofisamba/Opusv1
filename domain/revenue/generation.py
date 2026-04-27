@@ -245,9 +245,14 @@ def full_revenue_schedule(
             market_price = inputs.revenue.market_price_at_year(period.year_index)
             revenue_keur = generation_mwh * market_price / 1000
         
-        # Apply balancing cost deduction (PV)
+        # Apply balancing cost deduction (PV - % of revenue)
         balancing_deduction = revenue_keur * inputs.revenue.balancing_cost_pv
         revenue_keur -= balancing_deduction
+
+        # Wind balancing cost (EUR/MWh absolute, e.g. 8.0 EUR/MWh for TUHO)
+        if inputs.revenue.balancing_cost_wind_eur_mwh > 0:
+            wind_bal_cost = generation_mwh * inputs.revenue.balancing_cost_wind_eur_mwh / 1000
+            revenue_keur -= wind_bal_cost
         
         # CO2 certificates (if enabled)
         if inputs.revenue.co2_enabled:

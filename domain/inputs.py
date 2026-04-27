@@ -234,6 +234,7 @@ class RevenueParams:
     market_inflation: float = 0.02  # Inputs!B129 - Market price inflation (2%)
     balancing_cost_pv: float = 0.025  # Inputs!D114 - Balancing cost % (2.5%)
     balancing_cost_bess: float = 0.025  # Inputs!D115 - BESS balancing cost
+    balancing_cost_wind_eur_mwh: float = 0.0  # Wind balancing cost (EUR/MWh), e.g. 8.0 for TUHO
     co2_enabled: bool = False      # Inputs!D139 - CO2 certificates enabled
     co2_price_eur: float = 1.5     # Inputs!E141 - CO2 price (1.5 €/ton)
 
@@ -552,6 +553,7 @@ class ProjectInputs:
             tax=tax,
         )
 
+    @classmethod
     def create_default_tuho_wind1(cls) -> "ProjectInputs":
         """Create default TUHO Wind 1 project inputs matching Excel.
 
@@ -658,8 +660,8 @@ class ProjectInputs:
             operating_hours_p50=4164.0,
             operating_hours_p90_10y=3620.0,
             pv_degradation=0.0,  # Wind: no degradation in Excel model
-            plant_availability=0.97,
-            grid_availability=0.99,
+            plant_availability=1.0,  # Wind: operating hours already reflect realistic output
+            grid_availability=1.0,   # Wind: no separate availability adjustment
             bess_enabled=False,
         )
 
@@ -680,10 +682,11 @@ class ProjectInputs:
             market_scenario="Central",
             market_prices_curve=market_prices,
             market_inflation=0.02,
-            balancing_cost_pv=0.0,  # Wind: no balancing cost
+            balancing_cost_pv=0.0,  # Wind: no PV balancing
             balancing_cost_bess=0.0,
-            co2_enabled=False,  # No CO2 certificates in TUHO model
-            co2_price_eur=0.0,
+            balancing_cost_wind_eur_mwh=8.0,  # Wind balancing cost from TUHO Excel (578 kEUR/H = 8 EUR/MWh)
+            co2_enabled=True,  # TUHO has CO2 certificate revenue
+            co2_price_eur=4.191,  # CO2 price Y1 from TUHO Excel (302.9 kEUR/H)
         )
 
         financing = FinancingParams(
