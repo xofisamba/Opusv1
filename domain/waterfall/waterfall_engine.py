@@ -584,7 +584,7 @@ def run_waterfall(
         cf_after_tax = ebitda - tax_this_period
         
         # CF after senior and SHL debt service
-        cf_after_ds = cf_after_tax - senior_ds - shl_svc
+        cf_after_ds = cf_after_tax - senior_ds - shi  # shi only, not shp (principal is balance sheet, not cash flow)
         
         # DSRA funding (6 months of debt service)
         # DSRA funding — rolling target based on future debt service
