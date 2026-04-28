@@ -656,21 +656,20 @@ class ProjectInputs:
             reserve_accounts_keur=0.0,
         )
 
-        # OpEx from Excel OpEx sheet (Y1 total = 1,339 kEUR per Sprint 10 brief)
-        # Scaled down from 1,998 to match Excel CF sheet verification
+        # OpEx from Excel OpEx sheet Y1 = 1,998 kEUR (H1: 991 + H2: 1,007)
         opex_items = (
-            OpexItem(name="Technical Management", y1_amount_keur=187.64, annual_inflation=0.02),
-            OpexItem(name="O&M Preventive & Corrective", y1_amount_keur=285.89, annual_inflation=0.02),
-            OpexItem(name="Maintain Site", y1_amount_keur=45.57, annual_inflation=0.02),
-            OpexItem(name="Clean Material", y1_amount_keur=3.35, annual_inflation=0.02),
-            OpexItem(name="Security", y1_amount_keur=33.51, annual_inflation=0.02),
-            OpexItem(name="Insurance", y1_amount_keur=314.13, annual_inflation=0.02),
-            OpexItem(name="Lease & Property Tax", y1_amount_keur=166.79, annual_inflation=0.02),
-            OpexItem(name="Power Expenses", y1_amount_keur=62.81, annual_inflation=0.02),
-            OpexItem(name="Audit & Accounting & Legal", y1_amount_keur=16.08, annual_inflation=0.02),
-            OpexItem(name="Bank Fees (opex)", y1_amount_keur=13.4, annual_inflation=0.02),
-            OpexItem(name="Environmental & Social Management", y1_amount_keur=134.03, annual_inflation=0.02),
-            OpexItem(name="Contingencies", y1_amount_keur=75.79, annual_inflation=0.06),
+            OpexItem(name="Technical Management", y1_amount_keur=279.99, annual_inflation=0.02),
+            OpexItem(name="O&M Preventive & Corrective", y1_amount_keur=426.60, annual_inflation=0.02),
+            OpexItem(name="Maintain Site", y1_amount_keur=68.00, annual_inflation=0.02),
+            OpexItem(name="Clean Material", y1_amount_keur=5.00, annual_inflation=0.02),
+            OpexItem(name="Security", y1_amount_keur=50.00, annual_inflation=0.02),
+            OpexItem(name="Insurance", y1_amount_keur=468.74, annual_inflation=0.02),
+            OpexItem(name="Lease & Property Tax", y1_amount_keur=248.88, annual_inflation=0.02),
+            OpexItem(name="Power Expenses", y1_amount_keur=93.72, annual_inflation=0.02),
+            OpexItem(name="Audit & Accounting & Legal", y1_amount_keur=23.99, annual_inflation=0.02),
+            OpexItem(name="Bank Fees (opex)", y1_amount_keur=20.00, annual_inflation=0.02),
+            OpexItem(name="Environmental & Social Management", y1_amount_keur=200.00, annual_inflation=0.02),
+            OpexItem(name="Contingencies", y1_amount_keur=113.09, annual_inflation=0.06),
         )
 
         info = ProjectInfo(
@@ -688,7 +687,7 @@ class ProjectInputs:
         technical = TechnicalParams(
             capacity_mw=35.0,
             yield_scenario="P_50",
-            operating_hours_p50=3258.0,  # Calibrated to match Excel Y1 revenue of ~6,447 kEUR
+            operating_hours_p50=4164.0,  # From TUHO Excel: P50 yield = 145,740 MWh/yr ÷ 35 MW
             operating_hours_p90_10y=3620.0,
             pv_degradation=0.0,  # Wind: no degradation in Excel model
             plant_availability=1.0,  # Wind: operating hours already reflect realistic output
