@@ -81,6 +81,9 @@ class WaterfallPeriod:
     cum_distribution_keur: float
     # Cash balance
     cash_balance_keur: float
+    # SHL balance (for tracking PIK accumulation)
+    shl_balance_keur: float = 0.0  # Closing SHL balance after PIK capitalization
+    shl_pik_keur: float = 0.0  # PIK amount capitalized this period
     # Debt schedule tracking (for financial statements)
     senior_balance_keur: float = 0.0  # Closing balance after principal payment
 
@@ -256,7 +259,7 @@ def compute_shl_period(
         interest_net = interest_full * (1 - wht_rate)
         if not pik_switch_triggered:
             # PIK: plati što možeš, razlika se kapitalizira
-            interest_paid = min(cf_after_senior_ds, interest_net)
+            interest_paid = min(max(0.0, cf_after_senior_ds), interest_net)
             pik = interest_full - interest_paid  # kapitalizira se GROSS razlika (full - paid_net)
             return interest_paid, 0.0, pik, shl_balance + pik
         else:
@@ -834,6 +837,8 @@ def run_waterfall(
             shl_interest_keur=shi,
             shl_principal_keur=shp,
             shl_service_keur=shl_svc,
+            shl_balance_keur=shl_balance,
+            shl_pik_keur=shl_pik,
             dsra_contribution_keur=dsra_contrib,
             dsra_balance_keur=dsra_balance,
             mra_contribution_keur=0,
@@ -862,10 +867,12 @@ def run_waterfall(
             # Bullet SHL: equity CF = SHL interest + principal at maturity
             equity_cf_for_period = shi + shp
         elif equity_irr_method == "shl_plus_dividends":
-            # Amortizing SHL: equity CF = SHL interest + amortizing principal while SHL outstanding
-            # After SHL repaid: equity receives distributions (dividends)
+            # Excel verified: equity CF = SHL Net Interests + Dividends
+            # R17: Net Interests only (principal = 0 throughout Y1-Y20)
+            # R21 Total = R17 + R20 (dividends start ~Y20 when SHL repaid)
+            # SHL principal is NOT returned as cash flow in equity IRR stream
             if shl_balance > 0:
-                equity_cf_for_period = shi + shp  # SHL cash flows during SHL life
+                equity_cf_for_period = shi  # Net interest ONLY — no principal in equity CF
             else:
                 equity_cf_for_period = dist  # Dividends after SHL fully repaid
         else:
@@ -1057,6 +1064,9 @@ def cached_run_waterfall(
         dsra_months=dsra_months,
         shl_amount=shl_amount,
         shl_rate=shl_rate,
+        shl_repayment_method=inputs.financing.shl_repayment_method,
+        shl_wht_rate=inputs.tax.wht_sponsor_shl_interest,
+        equity_irr_method=inputs.financing.equity_irr_method,
         discount_rate_project=discount_rate_project,
         discount_rate_equity=discount_rate_equity,
         financial_close=inputs.info.financial_close,
@@ -1064,4 +1074,6 @@ def cached_run_waterfall(
         bank_fees_keur=inputs.capex.bank_fees_keur,
         commitment_fees_keur=inputs.capex.commitment_fees_keur,
         prior_tax_loss_keur=inputs.tax.prior_tax_loss_keur,
+        fixed_debt_keur=inputs.financing.fixed_debt_keur,
+        fixed_ds_keur=inputs.financing.fixed_ds_keur,
     )

@@ -541,7 +541,7 @@ class ProjectInputs:
             share_capital_keur=500.0,
             share_premium_keur=0.0,
             shl_amount_keur=13547.2,
-            shl_rate=0.08,
+            shl_rate=0.08,  # Oborovo: 8% SHL rate (different from TUHO 5.95%)
             gearing_ratio=0.7524,  # Excel: 75.24%
             senior_tenor_years=14,
             base_rate=0.03,  # Excel: 3.0%
@@ -723,11 +723,10 @@ class ProjectInputs:
             share_capital_keur=500.0,
             share_premium_keur=0.0,
             shl_amount_keur=29135.0,   # Shareholder Loan from Excel Inputs (39.91% of 72,994 kEUR)
-            shl_rate=0.08,
-            gearing_ratio=0.594,  # 43,359 / 72,994 = 59.4%
+            shl_rate=0.0595,   # All-in Rate from Excel Inputs (5.95% = 3.1% base + 2.85% margin)
             senior_tenor_years=14,
-            base_rate=0.03,
-            margin_bps=300,  # All-in = 6.0%
+            base_rate=0.033,  # Fixed Base Rate from Excel DS R37 = 3.3%
+            margin_bps=265,  # All-in = 5.95% = 3.3% + 2.65%
             floating_share=0.2,
             fixed_share=0.8,
             hedge_coverage=0.8,
