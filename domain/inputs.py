@@ -747,7 +747,7 @@ class ProjectInputs:
             atad_ebitda_limit=0.30,
             atad_min_interest_keur=3000.0,
             wht_sponsor_dividends=0.05,
-            wht_sponsor_shl_interest=0.0,
+            wht_sponsor_shl_interest=0.18,  # 18% WHT on SHL interest per Excel (954/1165 = 0.82)
             shl_cap_applies=True,
         )
 

@@ -205,6 +205,7 @@ def run_waterfall(
     dsra_months: int = 6,
     shl_amount: float = 0,
     shl_rate: float = 0,
+    shl_wht_rate: float = 0.0,  # Withholding tax rate on SHL interest (e.g., 0.18 for TUHO)
     discount_rate_project: float = 0.0641,
     discount_rate_equity: float = 0.0965,
     financial_close: 'date' = None,
@@ -565,23 +566,26 @@ def run_waterfall(
         cf_after_tax = ebitda - tax_this_period
         
         # SHL service — PIK (Payment-in-Kind) structure
-        # Computed after tax so cf_after_tax is available
+        # Per Excel: SHL interest = full_interest × (1 - WHT), computed on shl_balance
+        # FCF for SHL = cf_after_tax (NO senior DS subtraction — senior DS is separate priority)
+        # If CF >= net interest: pay net, balance grows by (full - net)
+        # If CF < net interest: pay CF, balance grows by (full - CF), PIK shortfall
         if shl_balance > 0:
             if equity_irr_method == "shl_plus_dividends":
-                # PIK SHL: if FCF < full interest, shortfall capitalizes to balance
-                cf_for_shl = max(0, cf_after_tax - senior_ds)  # CF after tax and senior DS
                 shl_interest_full = shl_balance * shl_rate / 2
-                if cf_for_shl >= shl_interest_full:
-                    shi = shl_interest_full
-                    shl_interest_pik = 0.0
-                    excess = cf_for_shl - shl_interest_full
-                    shp = min(excess, shl_balance)
+                shl_interest_net = shl_interest_full * (1 - shl_wht_rate)
+                cf_for_shl = cf_after_tax  # No senior DS subtraction — Excel doesn't do this
+                if cf_for_shl >= shl_interest_net:
+                    shi = shl_interest_net  # Pay net interest (after WHT)
+                    shp = 0.0  # No principal repayment in PIK phase
+                    # Balance grows by full interest - paid = (full - net)
+                    shl_balance = shl_balance + (shl_interest_full - shi)
                 else:
-                    shi = cf_for_shl
-                    shl_interest_pik = shl_interest_full - cf_for_shl
+                    shi = cf_for_shl  # Pay what we can
                     shp = 0.0
-                shl_balance = shl_balance - shp + shl_interest_pik
-                shl_svc = shi + shp
+                    # Balance grows by full interest - paid
+                    shl_balance = shl_balance + (shl_interest_full - shi)
+                shl_svc = shi  # Only interest paid (principal is PIK'd/capitalized)
             elif equity_irr_method == "shl_interest_only":
                 shi = shl_balance * shl_rate / 2
                 shp = shl_balance if period_in_tenor == tenor_periods - 1 else 0

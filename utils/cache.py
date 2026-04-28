@@ -360,6 +360,7 @@ def cached_run_waterfall_v3(
     dsra_months: int = 6,
     shl_amount: float = 0.0,
     shl_rate: float = 0.0,
+    shl_wht_rate: float = 0.0,  # Withholding tax rate on SHL interest
     discount_rate_project: float = 0.0641,
     discount_rate_equity: float = 0.0965,
     fixed_debt_keur: float | None = None,  # Override sculpted debt (for P90 sizing)
@@ -449,6 +450,7 @@ def cached_run_waterfall_v3(
         dsra_months=dsra_months,
         shl_amount=shl_amount,
         shl_rate=shl_rate,
+        shl_wht_rate=shl_wht_rate,
         discount_rate_project=discount_rate_project,
         discount_rate_equity=discount_rate_equity,
         financial_close=inputs.info.financial_close,
