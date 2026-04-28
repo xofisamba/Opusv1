@@ -190,6 +190,93 @@ def compute_plcr(
     return pv / debt_balance
 
 
+def compute_shl_period(
+    shl_balance: float,
+    shl_rate_per_period: float,
+    cf_after_senior_ds: float,
+    method: str,
+    wht_rate: float = 0.0,
+    pik_switch_triggered: bool = False,
+) -> tuple[float, float, float, float]:
+    """Compute SHL cash flows for one period.
+
+    Args:
+        shl_balance: Current SHL balance
+        shl_rate_per_period: SHL interest rate per period (e.g., 0.04 for semi-annual 8%)
+        cf_after_senior_ds: CF available after senior debt service (cf_after_tax)
+        method: "bullet" | "cash_sweep" | "pik" | "accrued" | "pik_then_sweep"
+        wht_rate: Withholding tax rate on SHL interest (e.g., 0.18)
+        pik_switch_triggered: True once senior debt is paid off (for pik_then_sweep)
+
+    Returns:
+        (shl_interest_paid, shl_principal, shl_pik_addition, new_shl_balance)
+        shl_interest_paid = neto iznos koji investitor prima (after WHT)
+        shl_principal = otplata glavnice (smanjuje balance)
+        shl_pik_addition = kapitalizacija (povećava balance)
+        new_shl_balance = ažurirani balance
+    """
+    if shl_balance <= 0:
+        return 0.0, 0.0, 0.0, 0.0
+
+    # Full (gross) interest on SHL balance
+    interest_full = shl_balance * shl_rate_per_period
+    # Net interest after WHT
+    interest_net = interest_full * (1 - wht_rate)
+
+    if method == "bullet":
+        # Pay net interest if CF available, otherwise PIK
+        if cf_after_senior_ds >= interest_net:
+            return interest_net, 0.0, 0.0, shl_balance
+        else:
+            pik = interest_full
+            return 0.0, 0.0, pik, shl_balance + pik
+
+    elif method == "cash_sweep":
+        # Priority: interest → principal from remaining CF
+        interest_paid = min(interest_net, cf_after_senior_ds)
+        remaining = cf_after_senior_ds - interest_paid
+        principal = min(remaining, shl_balance)
+        # PIK = full interest - interest paid
+        pik = max(0.0, interest_full - interest_paid / (1 - wht_rate)) if wht_rate > 0 else max(0.0, interest_full - interest_paid)
+        new_bal = shl_balance - principal + pik
+        return interest_paid, principal, pik, max(0.0, new_bal)
+
+    elif method == "pik":
+        # Everything capitalizes, no cash outflow
+        pik = interest_full
+        return 0.0, 0.0, pik, shl_balance + pik
+
+    elif method == "accrued":
+        # Nothing is paid or capitalized (liability for later)
+        return 0.0, 0.0, 0.0, shl_balance
+
+    elif method == "pik_then_sweep":
+        # PIK while senior debt outstanding, sweep after
+        # PIK phase: if CF >= net interest, pay net + PIK the excess (full - net)
+        #           if CF < net interest, pay all CF to interest + PIK the shortfall
+        if not pik_switch_triggered:
+            if cf_after_senior_ds >= interest_net:
+                # CF can cover net interest: pay net, PIK the WHT difference (full - net)
+                shi = interest_net
+                pik = interest_full - interest_net  # WHT portion capitalizes
+                return shi, 0.0, pik, shl_balance + pik
+            else:
+                # CF shortfall: pay what we can to interest, rest is PIK
+                shi = cf_after_senior_ds
+                pik = interest_full - shi
+                return shi, 0.0, pik, shl_balance + pik
+        else:
+            # Sweep phase — all CF after senior DS goes to SHL
+            interest_paid = min(interest_net, cf_after_senior_ds)
+            remaining = cf_after_senior_ds - interest_paid
+            principal = min(remaining, shl_balance)
+            new_bal = shl_balance - principal
+            return interest_paid, principal, 0.0, max(0.0, new_bal)
+
+    else:
+        raise ValueError(f"Unknown SHL method: {method}")
+
+
 def run_waterfall(
     ebitda_schedule: list[float],
     revenue_schedule: list[float],
@@ -205,6 +292,7 @@ def run_waterfall(
     dsra_months: int = 6,
     shl_amount: float = 0,
     shl_rate: float = 0,
+    shl_repayment_method: str = "bullet",  # "bullet" | "cash_sweep" | "pik" | "accrued" | "pik_then_sweep"
     shl_wht_rate: float = 0.0,  # Withholding tax rate on SHL interest (e.g., 0.18 for TUHO)
     discount_rate_project: float = 0.0641,
     discount_rate_equity: float = 0.0965,
@@ -510,12 +598,24 @@ def run_waterfall(
         ebitda = ebitda_schedule[i]
         dep = depreciation_schedule[i] if i < len(depreciation_schedule) else 0
         
-        # Senior debt service - BUG-3 fix: use op_period_counter for semi-annual indexing
+        # Senior debt service — compute from balance schedule + fixed DS
+        # For fixed_ds_keur approach: interest = balance * rate, principal = fixed_ds - interest
         period_in_tenor = op_period_counter
         if period_in_tenor < tenor_periods:
+            # Get current period balance (opening balance for this period)
+            opening_balance = balance_schedule[period_in_tenor] if period_in_tenor < len(balance_schedule) else 0
             si = interest_schedule[period_in_tenor]
-            sp = principal_schedule[period_in_tenor]
-            senior_ds = payments[period_in_tenor]
+            
+            # Fixed DS approach: fixed payment = interest + principal
+            # Principal = fixed_ds - interest (but cap at remaining balance for balloon)
+            if period_in_tenor == tenor_periods - 1:
+                # Last period: balloon — pay off entire remaining balance
+                sp = opening_balance
+                senior_ds = si + sp
+            else:
+                # Normal period: fixed DS → principal = fixed_ds - interest (capped at balance)
+                sp = min(fixed_ds_keur - si, opening_balance) if fixed_ds_keur else principal_schedule[period_in_tenor]
+                senior_ds = payments[period_in_tenor]
         else:
             si = 0
             sp = 0
@@ -523,7 +623,25 @@ def run_waterfall(
         op_period_counter += 1
         
         # Remaining senior debt balance for this period
-        remaining_senior_balance = balance_schedule[period_in_tenor] if period_in_tenor < len(balance_schedule) else 0
+        # For balloon period: this is the balance BEFORE payment (opening)
+        # After balloon: remaining should be 0 since balance is paid off
+        if period_in_tenor < len(balance_schedule):
+            if period_in_tenor == tenor_periods - 1:
+                # Balloon period: remaining is the PRE-BALLOON balance (opening)
+                # After balloon payment, closing balance = 0
+                remaining_senior_balance = balance_schedule[period_in_tenor]
+            else:
+                # Normal period: remaining = balance at START of next period (closing)
+                if period_in_tenor + 1 < len(balance_schedule):
+                    remaining_senior_balance = balance_schedule[period_in_tenor + 1]
+                else:
+                    remaining_senior_balance = 0
+        else:
+            remaining_senior_balance = 0
+        
+        # Force senior balance to 0 after tenor ends (post-tenor period has no senior debt)
+        if period_in_tenor >= tenor_periods:
+            remaining_senior_balance = 0.0
         
         # SHL service placeholder (will be computed after tax)
         # SHL PIK logic moved to after cf_after_tax computation
@@ -565,38 +683,19 @@ def run_waterfall(
         # CF after tax
         cf_after_tax = ebitda - tax_this_period
         
-        # SHL service — PIK (Payment-in-Kind) structure
-        # Per Excel: SHL interest = full_interest × (1 - WHT), computed on shl_balance
-        # FCF for SHL = cf_after_tax (NO senior DS subtraction — senior DS is separate priority)
-        # If CF >= net interest: pay net, balance grows by (full - net)
-        # If CF < net interest: pay CF, balance grows by (full - CF), PIK shortfall
-        if shl_balance > 0:
-            if equity_irr_method == "shl_plus_dividends":
-                shl_interest_full = shl_balance * shl_rate / 2
-                shl_interest_net = shl_interest_full * (1 - shl_wht_rate)
-                cf_for_shl = cf_after_tax  # No senior DS subtraction — Excel doesn't do this
-                if cf_for_shl >= shl_interest_net:
-                    shi = shl_interest_net  # Pay net interest (after WHT)
-                    shp = 0.0  # No principal repayment in PIK phase
-                    # Balance grows by full interest - paid = (full - net)
-                    shl_balance = shl_balance + (shl_interest_full - shi)
-                else:
-                    shi = cf_for_shl  # Pay what we can
-                    shp = 0.0
-                    # Balance grows by full interest - paid
-                    shl_balance = shl_balance + (shl_interest_full - shi)
-                shl_svc = shi  # Only interest paid (principal is PIK'd/capitalized)
-            elif equity_irr_method == "shl_interest_only":
-                shi = shl_balance * shl_rate / 2
-                shp = shl_balance if period_in_tenor == tenor_periods - 1 else 0
-                shl_svc = shi + shp
-                shl_balance -= shp
-            else:
-                shi = shl_balance * shl_rate / 2
-                shp = 0
-                shl_svc = shi
-        else:
-            shi = 0; shp = 0; shl_svc = 0; shl_interest_pik = 0.0
+        # SHL service — use compute_shl_period() with shl_repayment_method
+        # Pik switch triggers when senior debt is fully repaid (for pik_then_sweep)
+        pik_switch_triggered = (remaining_senior_balance <= 0)
+
+        (shi, shp, shl_pik, shl_balance) = compute_shl_period(
+            shl_balance=shl_balance,
+            shl_rate_per_period=shl_rate / 2,
+            cf_after_senior_ds=cf_after_tax,  # CF for SHL = cf_after_tax (per Excel)
+            method=shl_repayment_method,
+            wht_rate=shl_wht_rate,
+            pik_switch_triggered=pik_switch_triggered,
+        )
+        shl_svc = shi + shp  # Total SHL service = interest + principal (for records)
         
         # CF after senior and SHL debt service
         cf_after_ds = cf_after_tax - senior_ds - shi  # shi only (principal is balance sheet, not cash outflow)  # shi only, not shp (principal is balance sheet, not cash flow)
@@ -687,6 +786,14 @@ def run_waterfall(
         
         cum_distribution += dist  # jednom, na kraju svih logika
         
+        # DSRA release in last 2 periods — add to distribution
+        if i >= len(periods) - 2 and dsra_balance > 0:
+            dsra_release = dsra_balance
+            dsra_balance = 0.0
+            dsra_contribution_keur = -dsra_release  # negative = release
+            dist += dsra_release  # DSRA release goes to distributions
+            cum_distribution += dsra_release
+        
         # Cash balance — after sweep
         cash_balance = cash_balance + cf_after_reserves - dist
         
@@ -736,7 +843,7 @@ def run_waterfall(
             cash_sweep_keur=sweep_amount,
             cum_distribution_keur=cum_distribution,
             cash_balance_keur=cash_balance,
-            senior_balance_keur=remaining_senior_balance,  # Closing debt balance after this period
+            senior_balance_keur=max(0.0, remaining_senior_balance - sp),  # Closing balance after principal payment
         )
         
         waterfall_periods.append(wp)
@@ -745,14 +852,18 @@ def run_waterfall(
         # Project IRR = unlevered (EBITDA - Tax), equity IRR = levered (distributions)
         project_cfs.append(ebitda - tax_this_period if ebitda else 0)
         # Equity CF for TUHO: Row 28 "Total" = SHL interest + SHL principal + dividends
+        # When SHL is outstanding: equity receives SHL cash flows (interest + principal)
+        # When SHL is repaid (shl_balance <= 0): equity receives distributions (dividends)
         if equity_irr_method == "shl_interest_only":
             # Bullet SHL: equity CF = SHL interest + principal at maturity
             equity_cf_for_period = shi + shp
         elif equity_irr_method == "shl_plus_dividends":
-            # Amortizing SHL: equity CF = SHL interest + amortizing principal
-            # NO dist during SHL amort (brief dividends start after SHL is fully repaid)
-            # After SHL is fully repaid (shp = 0), equity receives dividends via dist
-            equity_cf_for_period = shi + shp  # dist excluded during SHL outstanding (dividends after SHL repaid)
+            # Amortizing SHL: equity CF = SHL interest + amortizing principal while SHL outstanding
+            # After SHL repaid: equity receives distributions (dividends)
+            if shl_balance > 0:
+                equity_cf_for_period = shi + shp  # SHL cash flows during SHL life
+            else:
+                equity_cf_for_period = dist  # Dividends after SHL fully repaid
         else:
             # combined/equity_only: equity CF = distributions to equity
             equity_cf_for_period = dist

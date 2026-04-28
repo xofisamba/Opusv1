@@ -61,6 +61,7 @@ def _run_waterfall():
         dsra_months=fin.dsra_months,
         shl_amount=fin.shl_amount_keur,
         shl_rate=fin.shl_rate,
+        shl_repayment_method=getattr(fin, 'shl_repayment_method', 'bullet'),
         shl_wht_rate=inputs.tax.wht_sponsor_shl_interest,
         equity_irr_method=getattr(fin, 'equity_irr_method', 'equity_only'),
         share_capital_keur=fin.share_capital_keur,

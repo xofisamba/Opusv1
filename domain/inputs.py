@@ -319,6 +319,15 @@ class FinancingParams:
     debt_sizing_method: str = "dscr_sculpt"
     fixed_debt_keur: float | None = None  # Override sculpted debt with fixed amount
 
+    # SHL repayment method:
+    # "bullet" — sav principal na kraju tenora, kamate cash
+    # "cash_sweep" — principal iz FCF nakon senior DS (po prioritetu)
+    # "pik" — kamate i principal se kapitaliziraju uvijek
+    # "accrued" — ništa se ne plaća, sve do exit/refinanciranja
+    # "pik_then_sweep" — PIK dok nema FCF, sweep kad ima (TUHO)
+    shl_repayment_method: str = "bullet"
+    shl_pik_switch_period: int = 0  # 0 = auto (kad senior_balance = 0)
+
     @property
     def all_in_rate(self) -> float:
         """All-in interest rate (base + margin)."""
@@ -735,6 +744,7 @@ class ProjectInputs:
             debt_sizing_method="fixed",  # TUHO: Excel Macro uses avg DSCR 1.45x target
             fixed_debt_keur=43359.0,  # Excel-verified debt amount (hardcoded from Excel)
             equity_irr_method="shl_plus_dividends",  # TUHO: equity CF = SHL interest only (brief Sprint 13)
+            shl_repayment_method="pik_then_sweep",  # TUHO: PIK phase Y1-Y14, sweep phase Y15+
         )
 
         tax = TaxParams(
