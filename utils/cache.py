@@ -360,6 +360,7 @@ def cached_run_waterfall_v3(
     dsra_months: int = 6,
     shl_amount: float = 0.0,
     shl_rate: float = 0.0,
+    shl_idc_keur: float = 0.0,  # SHL IDC — added to opening balance
     shl_repayment_method: str = "bullet",  # "bullet" | "cash_sweep" | "pik" | "accrued" | "pik_then_sweep"
     shl_wht_rate: float = 0.0,  # Withholding tax rate on SHL interest
     discount_rate_project: float = 0.0641,
@@ -451,6 +452,7 @@ def cached_run_waterfall_v3(
         dsra_months=dsra_months,
         shl_amount=shl_amount,
         shl_rate=shl_rate,
+        shl_idc_keur=shl_idc_keur,
         shl_repayment_method=shl_repayment_method,
         shl_wht_rate=shl_wht_rate,
         discount_rate_project=discount_rate_project,

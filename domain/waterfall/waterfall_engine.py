@@ -251,27 +251,20 @@ def compute_shl_period(
         return 0.0, 0.0, 0.0, shl_balance
 
     elif method == "pik_then_sweep":
-        # PIK while senior debt outstanding, sweep after
-        # PIK phase: if CF >= net interest, pay net + PIK the excess (full - net)
-        #           if CF < net interest, pay all CF to interest + PIK the shortfall
+        # cofix fix: PIK → SWITCH trigger is FCF > accrued (NOT senior_balance=0)
+        interest_full = shl_balance * shl_rate_per_period
+        interest_net = interest_full * (1 - wht_rate)
         if not pik_switch_triggered:
-            if cf_after_senior_ds >= interest_net:
-                # CF can cover net interest: pay net, PIK the WHT difference (full - net)
-                shi = interest_net
-                pik = interest_full - interest_net  # WHT portion capitalizes
-                return shi, 0.0, pik, shl_balance + pik
-            else:
-                # CF shortfall: pay what we can to interest, rest is PIK
-                shi = cf_after_senior_ds
-                pik = interest_full - shi
-                return shi, 0.0, pik, shl_balance + pik
+            # PIK: plati što možeš, razlika se kapitalizira
+            interest_paid = min(cf_after_senior_ds, interest_net)
+            pik = interest_full - interest_paid  # kapitalizira se GROSS razlika (full - paid_net)
+            return interest_paid, 0.0, pik, shl_balance + pik
         else:
-            # Sweep phase — all CF after senior DS goes to SHL
-            interest_paid = min(interest_net, cf_after_senior_ds)
-            remaining = cf_after_senior_ds - interest_paid
+            # SWEEP: plati punu kamatu + principal iz viška
+            interest_paid = interest_net
+            remaining = cf_after_senior_ds - interest_net
             principal = min(remaining, shl_balance)
-            new_bal = shl_balance - principal
-            return interest_paid, principal, 0.0, max(0.0, new_bal)
+            return interest_paid, principal, 0.0, max(0.0, shl_balance - principal)
 
     else:
         raise ValueError(f"Unknown SHL method: {method}")
@@ -292,6 +285,7 @@ def run_waterfall(
     dsra_months: int = 6,
     shl_amount: float = 0,
     shl_rate: float = 0,
+    shl_idc_keur: float = 0.0,  # SHL IDC — added to opening balance
     shl_repayment_method: str = "bullet",  # "bullet" | "cash_sweep" | "pik" | "accrued" | "pik_then_sweep"
     shl_wht_rate: float = 0.0,  # Withholding tax rate on SHL interest (e.g., 0.18 for TUHO)
     discount_rate_project: float = 0.0641,
@@ -490,7 +484,7 @@ def run_waterfall(
     
     # State variables
     dsra_balance = (dsra_months / 12) * (sculpt_result.payment_schedule[0] * 2) if dsra_months > 0 and sculpt_result.payment_schedule else 0  # noqa: E501  mathematically equivalent to: dsra_months * payment / 6, clearer intent
-    shl_balance = shl_amount  # Track remaining SHL balance for bullet repayment
+    shl_balance = shl_amount + shl_idc_keur  # Opening balance = disbursed + IDC
     mra_balance = 0
     cash_balance = 0
     cum_distribution = 0
@@ -687,13 +681,23 @@ def run_waterfall(
         # Pik switch triggers when senior debt is fully repaid (for pik_then_sweep)
         pik_switch_triggered = (remaining_senior_balance <= 0)
 
+        # CF for SHL — conditional approach (cofix fix)
+        # TUHO pik_then_sweep: FCF for SHL = EBITDA - Senior DS (bez poreza)
+        # Ostatak: cf_after_tax (nepromijenjeno)
+        if shl_repayment_method == "pik_then_sweep":
+            _cf_for_shl = ebitda - senior_ds  # Excel: FCF = EBITDA - Senior DS
+            _pik_trigger = (_cf_for_shl > shl_balance * shl_rate / 2)
+        else:
+            _cf_for_shl = cf_after_tax
+            _pik_trigger = pik_switch_triggered
+
         (shi, shp, shl_pik, shl_balance) = compute_shl_period(
             shl_balance=shl_balance,
             shl_rate_per_period=shl_rate / 2,
-            cf_after_senior_ds=cf_after_tax,  # CF for SHL = cf_after_tax (per Excel)
+            cf_after_senior_ds=_cf_for_shl,
             method=shl_repayment_method,
             wht_rate=shl_wht_rate,
-            pik_switch_triggered=pik_switch_triggered,
+            pik_switch_triggered=_pik_trigger,
         )
         shl_svc = shi + shp  # Total SHL service = interest + principal (for records)
         
