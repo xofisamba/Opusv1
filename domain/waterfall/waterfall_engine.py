@@ -524,28 +524,9 @@ def run_waterfall(
         # Remaining senior debt balance for this period
         remaining_senior_balance = balance_schedule[period_in_tenor] if period_in_tenor < len(balance_schedule) else 0
         
-        # SHL service — amortizing or bullet based on equity_irr_method
-        # For "shl_plus_dividends": SHL amortizes from Y14 (period 28) to Y20 (period 40)
-        # For "shl_interest_only": SHL is bullet (full principal at maturity)
-        # Senior debt tenor = 14 years (28 periods). After that, SHL amortizes.
-        shl_amort_start_period = 27  # Y14-H1 (first amort period, period_in_tenor=27)
-        
-        if shl_balance > 0:
-            shi = shl_balance * shl_rate / 2  # Semi-annual interest
-            if equity_irr_method == "shl_plus_dividends" and remaining_senior_balance <= 0:
-                # Senior debt repaid, use FCF for SHL: shp = min(cf_after_reserves, shl_balance)
-                # But we need to use the value set in the distribution section
-                # When dist=0 and shl_balance>0, shl_repayment was set to cf_after_reserves
-                shp = min(shl_balance, max(0, cf_after_reserves))
-            elif equity_irr_method == "shl_interest_only" and period_in_tenor == tenor_periods - 1:
-                # Bullet SHL: repay full balance at last period
-                shp = shl_balance
-            else:
-                shp = 0
-            shl_svc = shi + shp
-            shl_balance -= shp
-        else:
-            shi = 0; shp = 0; shl_svc = 0
+        # SHL service placeholder (will be computed after tax)
+        # SHL PIK logic moved to after cf_after_tax computation
+        shi = 0; shp = 0; shl_svc = 0; shl_interest_pik = 0.0
         
         # ATAD-based tax calculation with fiscal reintegration
         # Interest deductibility limited to 30% of EBITDA (ATAD directive)
@@ -583,8 +564,38 @@ def run_waterfall(
         # CF after tax
         cf_after_tax = ebitda - tax_this_period
         
+        # SHL service — PIK (Payment-in-Kind) structure
+        # Computed after tax so cf_after_tax is available
+        if shl_balance > 0:
+            if equity_irr_method == "shl_plus_dividends":
+                # PIK SHL: if FCF < full interest, shortfall capitalizes to balance
+                cf_for_shl = max(0, cf_after_tax - senior_ds)  # CF after tax and senior DS
+                shl_interest_full = shl_balance * shl_rate / 2
+                if cf_for_shl >= shl_interest_full:
+                    shi = shl_interest_full
+                    shl_interest_pik = 0.0
+                    excess = cf_for_shl - shl_interest_full
+                    shp = min(excess, shl_balance)
+                else:
+                    shi = cf_for_shl
+                    shl_interest_pik = shl_interest_full - cf_for_shl
+                    shp = 0.0
+                shl_balance = shl_balance - shp + shl_interest_pik
+                shl_svc = shi + shp
+            elif equity_irr_method == "shl_interest_only":
+                shi = shl_balance * shl_rate / 2
+                shp = shl_balance if period_in_tenor == tenor_periods - 1 else 0
+                shl_svc = shi + shp
+                shl_balance -= shp
+            else:
+                shi = shl_balance * shl_rate / 2
+                shp = 0
+                shl_svc = shi
+        else:
+            shi = 0; shp = 0; shl_svc = 0; shl_interest_pik = 0.0
+        
         # CF after senior and SHL debt service
-        cf_after_ds = cf_after_tax - senior_ds - shi  # shi only, not shp (principal is balance sheet, not cash flow)
+        cf_after_ds = cf_after_tax - senior_ds - shi  # shi only (principal is balance sheet, not cash outflow)  # shi only, not shp (principal is balance sheet, not cash flow)
         
         # DSRA funding (6 months of debt service)
         # DSRA funding — rolling target based on future debt service
